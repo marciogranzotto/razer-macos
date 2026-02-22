@@ -61,9 +61,9 @@ export class SectionSettingBrightness extends SectionSettingBlock {
         {(this.mouseBrightnessFeature.configuration.enabledMatrix) &&
         <div className={'settings-brightness'}>
           <div>All</div>
-          <Brightness title={"Adjust mouse logo brightness"}
-                      currentBrightness={this.deviceSelected.brightnessLogo}
-                      handleBrightnessChange={(value) => {this.updateMouseBrightness('logo', value); }} />
+          <Brightness title={"Adjust mouse brightness"}
+                      currentBrightness={this.deviceSelected.brightness}
+                      handleBrightnessChange={(value) => {this.updateMouseBrightness('matrix', value); }} />
         </div>}
         {(this.mouseBrightnessFeature.configuration.enabledLogo) &&
         <div className={'settings-brightness'}>

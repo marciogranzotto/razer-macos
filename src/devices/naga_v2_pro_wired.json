@@ -8,6 +8,7 @@
   "featuresConfig": [
     {
       "mouseBrightness": {
+        "enabledMatrix": true,
         "enabledLogo": false,
         "enabledScroll": false,
         "enabledLeft": false,
