@@ -87,6 +87,8 @@ function getFeatureMenuFor(application, device, feature) {
       return null;
     case FeatureIdentifier.BATTERY:
       return null;
+    case FeatureIdentifier.BUTTON_MAPPING:
+      return null;
     default:
       throw 'Unmapped feature for identifier ' + feature.featureIdentifier + ' detected.';
   }
