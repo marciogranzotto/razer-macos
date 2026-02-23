@@ -9,53 +9,100 @@ const PANEL_NAMES = {
   0x04: '6-Button Side Panel',
 };
 
-const ACTION_TYPE_LABELS = {
-  0x00: 'Disabled',
-  0x01: 'Mouse Button',
-  0x02: 'Keyboard Key',
-  0x0a: 'Multimedia',
-  0x0c: 'Hypershift',
-};
+const ACTION_TYPES = [
+  { value: 0x00, label: 'Disabled' },
+  { value: 0x01, label: 'Mouse Button' },
+  { value: 0x02, label: 'Keyboard Key' },
+  { value: 0x0a, label: 'Multimedia' },
+];
 
-const MOUSE_BUTTON_LABELS = {
-  0x01: 'Left Click', 0x02: 'Right Click', 0x03: 'Middle Click',
-  0x04: 'Back', 0x05: 'Forward',
-};
+const MOUSE_BUTTONS = [
+  { value: 0x01, label: 'Left Click' },
+  { value: 0x02, label: 'Right Click' },
+  { value: 0x03, label: 'Middle Click' },
+  { value: 0x04, label: 'Back' },
+  { value: 0x05, label: 'Forward' },
+];
 
-const KEY_LABELS = {
-  0x04: 'A', 0x05: 'B', 0x06: 'C', 0x07: 'D', 0x08: 'E', 0x09: 'F',
-  0x0a: 'G', 0x0b: 'H', 0x0c: 'I', 0x0d: 'J', 0x0e: 'K', 0x0f: 'L',
-  0x10: 'M', 0x11: 'N', 0x12: 'O', 0x13: 'P', 0x14: 'Q', 0x15: 'R',
-  0x16: 'S', 0x17: 'T', 0x18: 'U', 0x19: 'V', 0x1a: 'W', 0x1b: 'X',
-  0x1c: 'Y', 0x1d: 'Z',
-  0x1e: '1', 0x1f: '2', 0x20: '3', 0x21: '4', 0x22: '5',
-  0x23: '6', 0x24: '7', 0x25: '8', 0x26: '9', 0x27: '0',
-  0x2d: '-', 0x2e: '=',
-  0x3a: 'F1', 0x3b: 'F2', 0x3c: 'F3', 0x3d: 'F4',
-  0x3e: 'F5', 0x3f: 'F6', 0x40: 'F7', 0x41: 'F8',
-  0x42: 'F9', 0x43: 'F10', 0x44: 'F11', 0x45: 'F12',
-};
+const KEYBOARD_KEYS = [
+  { value: 0x04, label: 'A' }, { value: 0x05, label: 'B' }, { value: 0x06, label: 'C' },
+  { value: 0x07, label: 'D' }, { value: 0x08, label: 'E' }, { value: 0x09, label: 'F' },
+  { value: 0x0a, label: 'G' }, { value: 0x0b, label: 'H' }, { value: 0x0c, label: 'I' },
+  { value: 0x0d, label: 'J' }, { value: 0x0e, label: 'K' }, { value: 0x0f, label: 'L' },
+  { value: 0x10, label: 'M' }, { value: 0x11, label: 'N' }, { value: 0x12, label: 'O' },
+  { value: 0x13, label: 'P' }, { value: 0x14, label: 'Q' }, { value: 0x15, label: 'R' },
+  { value: 0x16, label: 'S' }, { value: 0x17, label: 'T' }, { value: 0x18, label: 'U' },
+  { value: 0x19, label: 'V' }, { value: 0x1a, label: 'W' }, { value: 0x1b, label: 'X' },
+  { value: 0x1c, label: 'Y' }, { value: 0x1d, label: 'Z' },
+  { value: 0x1e, label: '1' }, { value: 0x1f, label: '2' }, { value: 0x20, label: '3' },
+  { value: 0x21, label: '4' }, { value: 0x22, label: '5' }, { value: 0x23, label: '6' },
+  { value: 0x24, label: '7' }, { value: 0x25, label: '8' }, { value: 0x26, label: '9' },
+  { value: 0x27, label: '0' },
+  { value: 0x2d, label: '-' }, { value: 0x2e, label: '=' },
+  { value: 0x3a, label: 'F1' }, { value: 0x3b, label: 'F2' }, { value: 0x3c, label: 'F3' },
+  { value: 0x3d, label: 'F4' }, { value: 0x3e, label: 'F5' }, { value: 0x3f, label: 'F6' },
+  { value: 0x40, label: 'F7' }, { value: 0x41, label: 'F8' }, { value: 0x42, label: 'F9' },
+  { value: 0x43, label: 'F10' }, { value: 0x44, label: 'F11' }, { value: 0x45, label: 'F12' },
+  { value: 0x28, label: 'Enter' }, { value: 0x29, label: 'Escape' },
+  { value: 0x2a, label: 'Backspace' }, { value: 0x2b, label: 'Tab' },
+  { value: 0x2c, label: 'Space' },
+  { value: 0x4f, label: 'Right Arrow' }, { value: 0x50, label: 'Left Arrow' },
+  { value: 0x51, label: 'Down Arrow' }, { value: 0x52, label: 'Up Arrow' },
+];
 
-const MEDIA_LABELS = {
-  0x00b5: 'Next Track', 0x00b6: 'Previous Track', 0x00cd: 'Play/Pause',
-  0x00e2: 'Mute', 0x00e9: 'Volume Up', 0x00ea: 'Volume Down',
-};
+const MEDIA_KEYS = [
+  { value: 0x00cd, label: 'Play/Pause' },
+  { value: 0x00b5, label: 'Next Track' },
+  { value: 0x00b6, label: 'Previous Track' },
+  { value: 0x00e2, label: 'Mute' },
+  { value: 0x00e9, label: 'Volume Up' },
+  { value: 0x00ea, label: 'Volume Down' },
+];
 
 function describeMapping(mapping) {
   if (!mapping) return 'Unknown';
   const { actionType, params } = mapping;
   switch (actionType) {
     case 0x00: return 'Disabled';
-    case 0x01: return MOUSE_BUTTON_LABELS[params[1]] || `Mouse Btn ${params[1]}`;
-    case 0x02: return KEY_LABELS[params[2]] || `Key 0x${params[2].toString(16)}`;
+    case 0x01: {
+      const btn = MOUSE_BUTTONS.find(b => b.value === params[1]);
+      return btn ? btn.label : `Mouse Btn ${params[1]}`;
+    }
+    case 0x02: {
+      const key = KEYBOARD_KEYS.find(k => k.value === params[2]);
+      return key ? key.label : `Key 0x${params[2].toString(16)}`;
+    }
     case 0x0a: {
       const code = (params[1] << 8) | params[2];
-      return MEDIA_LABELS[code] || `Media 0x${code.toString(16)}`;
+      const media = MEDIA_KEYS.find(m => m.value === code);
+      return media ? media.label : `Media 0x${code.toString(16)}`;
     }
     case 0x0c: return 'Hypershift';
     default: return `Type 0x${actionType.toString(16)}`;
   }
 }
+
+const btnStyle = {
+  fontSize: '10px',
+  padding: '3px 8px',
+  borderRadius: '10px',
+  border: '1px solid black',
+  backgroundColor: '#35363a',
+  color: '#47e10c',
+  cursor: 'pointer',
+  outline: 'none',
+};
+
+const selectStyle = {
+  fontSize: '11px',
+  padding: '3px 6px',
+  borderRadius: '6px',
+  border: '1px solid #555',
+  backgroundColor: '#2a2a2e',
+  color: '#47e10c',
+  outline: 'none',
+  cursor: 'pointer',
+};
 
 export class SectionSettingButtonMapping extends SectionSettingBlock {
 
@@ -68,21 +115,47 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
       panelType: this.deviceSelected.panelType || null,
       mappings: [],
       layer: 0x00,
+      editingButton: null,
+      editActionType: 0x00,
+      editActionValue: 0,
     };
 
     this.handleMappingsResponse = this.handleMappingsResponse.bind(this);
     this.handleMappingUpdated = this.handleMappingUpdated.bind(this);
+    this.handlePanelTypeResponse = this.handlePanelTypeResponse.bind(this);
+    this.handlePanelChanged = this.handlePanelChanged.bind(this);
   }
 
   componentDidMount() {
     ipcRenderer.on('button-mappings-response', this.handleMappingsResponse);
     ipcRenderer.on('button-mapping-updated', this.handleMappingUpdated);
-    this.requestMappings();
+    ipcRenderer.on('side-panel-type-response', this.handlePanelTypeResponse);
+    ipcRenderer.on('panel-type-changed', this.handlePanelChanged);
+    this.refreshPanelType();
   }
 
   componentWillUnmount() {
     ipcRenderer.removeListener('button-mappings-response', this.handleMappingsResponse);
     ipcRenderer.removeListener('button-mapping-updated', this.handleMappingUpdated);
+    ipcRenderer.removeListener('side-panel-type-response', this.handlePanelTypeResponse);
+    ipcRenderer.removeListener('panel-type-changed', this.handlePanelChanged);
+  }
+
+  handlePanelTypeResponse(event, data) {
+    const newPanel = data.panelType || null;
+    if (newPanel !== this.state.panelType) {
+      this.setState({ panelType: newPanel, mappings: [], editingButton: null }, () => {
+        this.requestMappings();
+      });
+    }
+  }
+
+  handlePanelChanged(event, data) {
+    if (data.productId !== this.deviceSelected.productId) return;
+    const newPanel = data.panelId || null;
+    this.setState({ panelType: newPanel, mappings: [], editingButton: null }, () => {
+      this.requestMappings();
+    });
   }
 
   handleMappingsResponse(event, data) {
@@ -90,8 +163,17 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
   }
 
   handleMappingUpdated(event, data) {
-    // Refresh all mappings after an update
     this.requestMappings();
+  }
+
+  refreshPanelType() {
+    ipcRenderer.send('get-side-panel-type', {
+      device: this.deviceSelected,
+    });
+    // Also request mappings if we already have a panel type
+    if (this.state.panelType != null) {
+      this.requestMappings();
+    }
   }
 
   requestMappings() {
@@ -104,37 +186,141 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
   }
 
   switchLayer(layer) {
-    this.setState({ layer }, () => {
+    this.setState({ layer, editingButton: null }, () => {
       this.requestMappings();
     });
   }
 
-  setDisabled(buttonId) {
-    ipcRenderer.send('set-button-mapping', {
-      device: this.deviceSelected,
-      buttonId,
-      layer: this.state.layer,
-      actionType: 0x00,
-      params: [0, 0, 0, 0, 0, 0],
+  startEditing(btn) {
+    const mapping = btn.mapping || {};
+    this.setState({
+      editingButton: btn.id,
+      editActionType: mapping.actionType || 0x00,
+      editActionValue: this.getValueFromMapping(mapping),
     });
   }
 
-  restoreDefault(buttonId) {
-    const panelConfig = this.buttonMappingFeature.configuration.panels[this.state.panelType];
-    if (!panelConfig) return;
-    const buttonConfig = panelConfig.buttons.find(b => b.id === buttonId);
-    if (!buttonConfig) return;
+  cancelEditing() {
+    this.setState({ editingButton: null });
+  }
+
+  getValueFromMapping(mapping) {
+    if (!mapping) return 0;
+    switch (mapping.actionType) {
+      case 0x01: return mapping.params[1] || 0x01;
+      case 0x02: return mapping.params[2] || 0x04;
+      case 0x0a: return (mapping.params[1] << 8) | mapping.params[2] || 0x00cd;
+      default: return 0;
+    }
+  }
+
+  buildParams(actionType, actionValue) {
+    switch (actionType) {
+      case 0x00: return [0, 0, 0, 0, 0, 0];
+      case 0x01: return [0x01, actionValue, 0, 0, 0, 0];
+      case 0x02: return [0x02, 0x00, actionValue, 0, 0, 0];
+      case 0x0a: return [0x03, (actionValue >> 8) & 0xff, actionValue & 0xff, 0, 0, 0];
+      default: return [0, 0, 0, 0, 0, 0];
+    }
+  }
+
+  applyEdit(buttonId) {
+    const { editActionType, editActionValue } = this.state;
+    const params = this.buildParams(editActionType, editActionValue);
     ipcRenderer.send('set-button-mapping', {
       device: this.deviceSelected,
       buttonId,
       layer: this.state.layer,
-      actionType: buttonConfig.defaultAction.type,
-      params: buttonConfig.defaultAction.params,
+      actionType: editActionType,
+      params,
     });
+    this.setState({ editingButton: null });
   }
 
   renderTitle() {
     return 'Side Button Mapping';
+  }
+
+  renderEditor(btnId) {
+    const { editActionType, editActionValue } = this.state;
+
+    return <div style={{
+      padding: '8px 10px',
+      backgroundColor: '#2a2a2e',
+      borderBottom: '1px solid #47e10c',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+        <span style={{ color: '#999', fontSize: '11px', width: '45px' }}>Action:</span>
+        <select
+          value={editActionType}
+          onChange={(e) => {
+            const at = parseInt(e.target.value);
+            let defaultVal = 0;
+            if (at === 0x01) defaultVal = 0x01;
+            else if (at === 0x02) defaultVal = 0x04;
+            else if (at === 0x0a) defaultVal = 0x00cd;
+            this.setState({ editActionType: at, editActionValue: defaultVal });
+          }}
+          style={selectStyle}
+        >
+          {ACTION_TYPES.map(at => (
+            <option key={at.value} value={at.value}>{at.label}</option>
+          ))}
+        </select>
+      </div>
+
+      {editActionType === 0x01 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+          <span style={{ color: '#999', fontSize: '11px', width: '45px' }}>Button:</span>
+          <select
+            value={editActionValue}
+            onChange={(e) => this.setState({ editActionValue: parseInt(e.target.value) })}
+            style={selectStyle}
+          >
+            {MOUSE_BUTTONS.map(mb => (
+              <option key={mb.value} value={mb.value}>{mb.label}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {editActionType === 0x02 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+          <span style={{ color: '#999', fontSize: '11px', width: '45px' }}>Key:</span>
+          <select
+            value={editActionValue}
+            onChange={(e) => this.setState({ editActionValue: parseInt(e.target.value) })}
+            style={selectStyle}
+          >
+            {KEYBOARD_KEYS.map(kk => (
+              <option key={kk.value} value={kk.value}>{kk.label}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {editActionType === 0x0a && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+          <span style={{ color: '#999', fontSize: '11px', width: '45px' }}>Media:</span>
+          <select
+            value={editActionValue}
+            onChange={(e) => this.setState({ editActionValue: parseInt(e.target.value) })}
+            style={selectStyle}
+          >
+            {MEDIA_KEYS.map(mk => (
+              <option key={mk.value} value={mk.value}>{mk.label}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: '5px', justifyContent: 'flex-end' }}>
+        <button onClick={() => this.cancelEditing()} style={btnStyle}>Cancel</button>
+        <button onClick={() => this.applyEdit(btnId)}
+          style={{ ...btnStyle, backgroundColor: '#47e10c', color: 'black' }}
+        >Apply</button>
+      </div>
+    </div>;
   }
 
   renderSettings() {
@@ -142,32 +328,29 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
       return null;
     }
 
-    const { panelType, mappings, layer } = this.state;
+    const { panelType, mappings, layer, editingButton } = this.state;
 
     if (panelType == null) {
-      return <div style={{ padding: '10px', color: 'grey' }}>
-        No side panel detected
+      return <div style={{ padding: '10px', color: 'grey', display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <span>No side panel detected</span>
+        <button onClick={() => this.refreshPanelType()} style={btnStyle}>Refresh</button>
       </div>;
     }
 
     const panelName = PANEL_NAMES[panelType] || `Panel 0x${panelType.toString(16)}`;
 
     return <div style={{ paddingTop: '10px' }}>
-      <div style={{ padding: '0 10px 10px', color: '#47e10c', fontSize: '13px' }}>
-        {panelName}
+      <div style={{ display: 'flex', padding: '0 10px 10px', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ color: '#47e10c', fontSize: '13px' }}>{panelName}</span>
+        <button onClick={() => this.refreshPanelType()} style={btnStyle}>Refresh</button>
       </div>
 
       <div style={{ display: 'flex', padding: '0 10px 10px', gap: '5px' }}>
         <button
           onClick={() => this.switchLayer(0x00)}
           style={{
-            flex: 1,
-            fontSize: '12px',
-            padding: '5px',
-            borderRadius: '15px',
-            border: '1px solid black',
-            outline: 'none',
-            cursor: 'pointer',
+            flex: 1, fontSize: '12px', padding: '5px', borderRadius: '15px',
+            border: '1px solid black', outline: 'none', cursor: 'pointer',
             backgroundColor: layer === 0x00 ? '#47e10c' : '#35363a',
             color: layer === 0x00 ? 'black' : '#47e10c',
           }}
@@ -175,13 +358,8 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
         <button
           onClick={() => this.switchLayer(0x01)}
           style={{
-            flex: 1,
-            fontSize: '12px',
-            padding: '5px',
-            borderRadius: '15px',
-            border: '1px solid black',
-            outline: 'none',
-            cursor: 'pointer',
+            flex: 1, fontSize: '12px', padding: '5px', borderRadius: '15px',
+            border: '1px solid black', outline: 'none', cursor: 'pointer',
             backgroundColor: layer === 0x01 ? '#47e10c' : '#35363a',
             color: layer === 0x01 ? 'black' : '#47e10c',
           }}
@@ -189,46 +367,25 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
       </div>
 
       {mappings.map(btn => (
-        <div key={btn.id} style={{
-          display: 'flex',
-          flexDirection: 'row',
-          alignItems: 'center',
-          padding: '4px 10px',
-          borderBottom: '1px solid #35363a',
-        }}>
-          <div style={{ width: '80px', color: '#47e10c', fontSize: '12px' }}>
-            {btn.label}
-          </div>
-          <div style={{ flex: 1, color: 'grey', fontSize: '12px' }}>
-            {describeMapping(btn.mapping)}
-          </div>
-          <button
-            onClick={() => this.restoreDefault(btn.id)}
+        <div key={btn.id}>
+          <div
+            onClick={() => this.startEditing(btn)}
             style={{
-              fontSize: '10px',
-              padding: '3px 8px',
-              marginRight: '4px',
-              borderRadius: '10px',
-              border: '1px solid black',
-              backgroundColor: '#35363a',
-              color: '#47e10c',
+              display: 'flex', flexDirection: 'row', alignItems: 'center',
+              padding: '6px 10px', borderBottom: '1px solid #35363a',
               cursor: 'pointer',
-              outline: 'none',
+              backgroundColor: editingButton === btn.id ? '#35363a' : 'transparent',
             }}
-          >Default</button>
-          <button
-            onClick={() => this.setDisabled(btn.id)}
-            style={{
-              fontSize: '10px',
-              padding: '3px 8px',
-              borderRadius: '10px',
-              border: '1px solid black',
-              backgroundColor: '#35363a',
-              color: '#47e10c',
-              cursor: 'pointer',
-              outline: 'none',
-            }}
-          >Disable</button>
+          >
+            <div style={{ width: '80px', color: '#47e10c', fontSize: '12px' }}>
+              {btn.label}
+            </div>
+            <div style={{ flex: 1, color: 'grey', fontSize: '12px' }}>
+              {describeMapping(btn.mapping)}
+            </div>
+            <span style={{ color: '#666', fontSize: '10px' }}>edit</span>
+          </div>
+          {editingButton === btn.id && this.renderEditor(btn.id)}
         </div>
       ))}
     </div>;

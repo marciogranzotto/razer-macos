@@ -25,6 +25,7 @@ export class Application {
 
     // Init the main application
     this.razerApplication = new RazerApplication();
+    this.razerApplication.application = this;
   }
 
   initListeners() {
@@ -34,6 +35,7 @@ export class Application {
     });
 
     this.app.on('quit', () => {
+      this.razerApplication.stopInterruptListeners();
       this.razerApplication.destroy();
     });
 
@@ -163,6 +165,15 @@ export class Application {
     });
 
     // button mappings
+    ipcMain.on('get-side-panel-type', (event, arg) => {
+      const { device } = arg;
+      const currentDevice = this.razerApplication.deviceManager.getByInternalId(device.internalId);
+      if (!currentDevice) return;
+      const panelType = currentDevice.getSidePanelType();
+      currentDevice.panelType = panelType;
+      event.reply('side-panel-type-response', { panelType });
+    });
+
     ipcMain.on('get-button-mappings', (event, arg) => {
       const { device, panelId, layer } = arg;
       const currentDevice = this.razerApplication.deviceManager.getByInternalId(device.internalId);
@@ -319,12 +330,14 @@ export class Application {
       this.refreshTray();
     });
 
-    this.refreshTray(true);
+    this.refreshTray(true).then(() => {
+      this.razerApplication.startInterruptListeners();
+    });
   }
 
   refreshTray(withDeviceRefresh) {
     const refresh = withDeviceRefresh ? this.razerApplication.refresh() : Promise.resolve(true);
-    refresh.then(() => {
+    return refresh.then(() => {
       const contextMenu = Menu.buildFromTemplate(getMenuFor(this));
       this.tray.setContextMenu(contextMenu);
     });

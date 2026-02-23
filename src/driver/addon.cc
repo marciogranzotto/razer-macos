@@ -10,9 +10,35 @@ extern "C"
 #include "razermousedock_driver.h"
 #include "razermousemat_driver.h"
 #include "razerheadphone_driver.h"
+#include "razerinterrupt.h"
 }
 
 RazerDevices devices;
+
+// Thread-safe function for panel change callbacks from C thread to JS
+static Napi::ThreadSafeFunction panelChangeTsfn;
+static bool panelChangeTsfnActive = false;
+static razer_interrupt_listener **activeListeners = nullptr;
+static int activeListenerCount = 0;
+
+// Called from the C interrupt thread — must use ThreadSafeFunction to cross into JS
+static void on_panel_change(UInt16 product_id, unsigned char panel_id, void *context) {
+    if (panelChangeTsfnActive) {
+        // Pack product_id and panel_id into a single uint32
+        uint32_t data = ((uint32_t)product_id << 8) | panel_id;
+        uint32_t *heapData = new uint32_t(data);
+        panelChangeTsfn.NonBlockingCall(heapData, [](Napi::Env env, Napi::Function jsCallback, uint32_t *data) {
+            uint32_t packed = *data;
+            uint16_t productId = (packed >> 8) & 0xFFFF;
+            uint8_t panelId = packed & 0xFF;
+            jsCallback.Call({
+                Napi::Number::New(env, productId),
+                Napi::Number::New(env, panelId)
+            });
+            delete data;
+        });
+    }
+}
 
 /**
 * Keyboard functions
@@ -938,6 +964,70 @@ void CloseAllDevices(const Napi::CallbackInfo &info) {
     closeAllRazerDevices(devices);
 }
 
+void StartInterruptListeners(const Napi::CallbackInfo &info) {
+    Napi::Env env = info.Env();
+
+    // Clean up any existing listeners and TSFN
+    if (activeListeners) {
+        for (int i = 0; i < activeListenerCount; i++) {
+            razer_stop_interrupt_listener(activeListeners[i]);
+        }
+        free(activeListeners);
+        activeListeners = nullptr;
+        activeListenerCount = 0;
+    }
+    if (panelChangeTsfnActive) {
+        panelChangeTsfn.Release();
+        panelChangeTsfn = Napi::ThreadSafeFunction();
+        panelChangeTsfnActive = false;
+    }
+
+    if (!info[0].IsFunction()) {
+        Napi::TypeError::New(env, "Callback function required").ThrowAsJavaScriptException();
+        return;
+    }
+
+    // Create thread-safe function
+    panelChangeTsfn = Napi::ThreadSafeFunction::New(
+        env,
+        info[0].As<Napi::Function>(),
+        "panelChangeCallback",
+        0,  // unlimited queue
+        1   // initial thread count
+    );
+    panelChangeTsfnActive = true;
+
+    // Start a listener for each open device that supports it
+    activeListeners = (razer_interrupt_listener **)malloc(devices.size * sizeof(razer_interrupt_listener *));
+    activeListenerCount = 0;
+
+    for (int i = 0; i < devices.size; i++) {
+        razer_interrupt_listener *listener = razer_start_interrupt_listener(
+            devices.devices[i].productId,
+            on_panel_change,
+            nullptr);
+        if (listener) {
+            activeListeners[activeListenerCount++] = listener;
+        }
+    }
+}
+
+void StopInterruptListeners(const Napi::CallbackInfo &info) {
+    if (activeListeners) {
+        for (int i = 0; i < activeListenerCount; i++) {
+            razer_stop_interrupt_listener(activeListeners[i]);
+        }
+        free(activeListeners);
+        activeListeners = nullptr;
+        activeListenerCount = 0;
+    }
+    if (panelChangeTsfnActive) {
+        panelChangeTsfn.Release();
+        panelChangeTsfn = Napi::ThreadSafeFunction();
+        panelChangeTsfnActive = false;
+    }
+}
+
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
 
     exports.Set("kbdSetModeNone", Napi::Function::New(env, KbdSetModeNone));
@@ -1027,6 +1117,10 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
     exports.Set("accessorySetModeBreathe", Napi::Function::New(env, AccessorySetModeBreathe));
     exports.Set("accessoryGetBrightness", Napi::Function::New(env, AccessoryGetBrightness));
     exports.Set("accessorySetBrightness", Napi::Function::New(env, AccessorySetBrightness));
+
+    // Interrupt listeners
+    exports.Set("startInterruptListeners", Napi::Function::New(env, StartInterruptListeners));
+    exports.Set("stopInterruptListeners", Napi::Function::New(env, StopInterruptListeners));
 
     // All devices
     exports.Set("getAllDevices", Napi::Function::New(env, GetAllDevices));

@@ -34,7 +34,31 @@ export class RazerApplication {
     });
   }
 
+  startInterruptListeners() {
+    const addon = this.deviceManager.addon;
+    addon.startInterruptListeners((productId, panelId) => {
+      const device = this.deviceManager.activeRazerDevices.find(
+        d => d.productId === productId
+      );
+      if (device) {
+        device.panelType = panelId === 0x00 ? null : panelId;
+      }
+      if (this.application && this.application.browserWindow) {
+        this.application.browserWindow.webContents.send('panel-type-changed', {
+          productId,
+          panelId,
+        });
+      }
+    });
+  }
+
+  stopInterruptListeners() {
+    const addon = this.deviceManager.addon;
+    addon.stopInterruptListeners();
+  }
+
   destroy() {
+    this.stopInterruptListeners();
     this.deviceManager.destroy();
   }
 
