@@ -69,8 +69,15 @@ function describeMapping(mapping) {
       return btn ? btn.label : `Mouse Btn ${params[1]}`;
     }
     case 0x02: {
+      const mod = params[1] || 0;
       const key = KEYBOARD_KEYS.find(k => k.value === params[2]);
-      return key ? key.label : `Key 0x${params[2].toString(16)}`;
+      const keyName = key ? key.label : `Key 0x${params[2].toString(16)}`;
+      const mods = [];
+      if (mod & 0x01) mods.push('Ctrl');
+      if (mod & 0x02) mods.push('Shift');
+      if (mod & 0x04) mods.push('Alt');
+      if (mod & 0x08) mods.push('Cmd');
+      return mods.length > 0 ? `${mods.join('+')}+${keyName}` : keyName;
     }
     case 0x0a: {
       const code = (params[1] << 8) | params[2];
@@ -118,6 +125,7 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
       editingButton: null,
       editActionType: 0x00,
       editActionValue: 0,
+      editModifier: 0,
     };
 
     this.handleMappingsResponse = this.handleMappingsResponse.bind(this);
@@ -197,6 +205,7 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
       editingButton: btn.id,
       editActionType: mapping.actionType || 0x00,
       editActionValue: this.getValueFromMapping(mapping),
+      editModifier: (mapping.actionType === 0x02 && mapping.params) ? (mapping.params[1] || 0) : 0,
     });
   }
 
@@ -214,19 +223,19 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
     }
   }
 
-  buildParams(actionType, actionValue) {
+  buildParams(actionType, actionValue, modifier = 0) {
     switch (actionType) {
       case 0x00: return [0, 0, 0, 0, 0, 0];
       case 0x01: return [0x01, actionValue, 0, 0, 0, 0];
-      case 0x02: return [0x02, 0x00, actionValue, 0, 0, 0];
-      case 0x0a: return [0x03, (actionValue >> 8) & 0xff, actionValue & 0xff, 0, 0, 0];
+      case 0x02: return [0x02, modifier, actionValue, 0, 0, 0];
+      case 0x0a: return [0x02, (actionValue >> 8) & 0xff, actionValue & 0xff, 0, 0, 0];
       default: return [0, 0, 0, 0, 0, 0];
     }
   }
 
   applyEdit(buttonId) {
-    const { editActionType, editActionValue } = this.state;
-    const params = this.buildParams(editActionType, editActionValue);
+    const { editActionType, editActionValue, editModifier } = this.state;
+    const params = this.buildParams(editActionType, editActionValue, editModifier);
     ipcRenderer.send('set-button-mapping', {
       device: this.deviceSelected,
       buttonId,
