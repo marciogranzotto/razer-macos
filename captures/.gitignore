@@ -1,0 +1,6 @@
+# Binary capture files (too large for git)
+*.pcapng
+*.pcap
+
+# Empty output files
+razer_decoded.txt
