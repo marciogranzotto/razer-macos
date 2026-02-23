@@ -16,3 +16,4 @@ FeatureIdentifier.MOUSE_BRIGHTNESS = 'mouseBrightness';
 FeatureIdentifier.POLL_RATE = 'pollRate';
 FeatureIdentifier.MOUSE_DPI = 'dpi';
 FeatureIdentifier.BATTERY = 'battery';
+FeatureIdentifier.BUTTON_MAPPING = 'buttonMapping';

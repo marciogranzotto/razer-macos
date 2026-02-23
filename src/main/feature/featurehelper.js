@@ -16,6 +16,7 @@ import { FeatureMouseDPI } from './featuremousedpi';
 import { RazerDeviceType } from '../device/razerdevicetype';
 import { FeatureIdentifier } from './featureidentifier';
 import { FeatureBattery } from './featurebattery';
+import { FeatureButtonMapping } from './featurebuttonmapping';
 
 export class FeatureHelper {
 
@@ -39,6 +40,7 @@ export class FeatureHelper {
       case FeatureIdentifier.POLL_RATE: return new FeatureMousePollRate(configuration);
       case FeatureIdentifier.MOUSE_DPI: return new FeatureMouseDPI(configuration);
       case FeatureIdentifier.BATTERY: return new FeatureBattery(configuration);
+      case FeatureIdentifier.BUTTON_MAPPING: return new FeatureButtonMapping(configuration);
       default:
         throw featureIdentifier+' is not a valid feature identifier!'
     }
