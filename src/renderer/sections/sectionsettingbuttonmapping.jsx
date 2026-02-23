@@ -14,6 +14,10 @@ const ACTION_TYPES = [
   { value: 0x01, label: 'Mouse Button' },
   { value: 0x02, label: 'Keyboard Key' },
   { value: 0x0a, label: 'Multimedia' },
+  { value: 0x0c, label: 'Hypershift' },
+  { value: 0x12, label: 'Scroll Wheel' },
+  { value: 0x06, label: 'Sensitivity' },
+  { value: 'default', label: 'Default' },
 ];
 
 const MOUSE_BUTTONS = [
@@ -59,6 +63,10 @@ const MEDIA_KEYS = [
   { value: 0x00ea, label: 'Volume Down' },
 ];
 
+const SCROLL_ACTIONS = [
+  { value: 0x04, label: 'Cycle Up Scroll Stages' },
+];
+
 function describeMapping(mapping) {
   if (!mapping) return 'Unknown';
   const { actionType, params } = mapping;
@@ -84,7 +92,16 @@ function describeMapping(mapping) {
       const media = MEDIA_KEYS.find(m => m.value === code);
       return media ? media.label : `Media 0x${code.toString(16)}`;
     }
+    case 0x06: {
+      const xDpi = (params[2] << 8) | params[3];
+      const yDpi = (params[4] << 8) | params[5];
+      return xDpi === yDpi ? `Clutch ${xDpi} DPI` : `Clutch ${xDpi}/${yDpi} DPI`;
+    }
     case 0x0c: return 'Hypershift';
+    case 0x12: {
+      const scrollAction = SCROLL_ACTIONS.find(s => s.value === params[1]);
+      return scrollAction ? scrollAction.label : `Scroll 0x${params[1].toString(16)}`;
+    }
     default: return `Type 0x${actionType.toString(16)}`;
   }
 }
@@ -219,6 +236,13 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
       case 0x01: return mapping.params[1] || 0x01;
       case 0x02: return mapping.params[2] || 0x04;
       case 0x0a: return (mapping.params[1] << 8) | mapping.params[2] || 0x00cd;
+      case 0x0c: return 0;
+      case 0x12: return mapping.params[1] || 0x04;
+      case 0x06: {
+        const xDpi = (mapping.params[2] << 8) | mapping.params[3];
+        const yDpi = (mapping.params[4] << 8) | mapping.params[5];
+        return (xDpi << 16) | yDpi;
+      }
       default: return 0;
     }
   }
@@ -229,6 +253,14 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
       case 0x01: return [0x01, actionValue, 0, 0, 0, 0];
       case 0x02: return [0x02, modifier, actionValue, 0, 0, 0];
       case 0x0a: return [0x02, (actionValue >> 8) & 0xff, actionValue & 0xff, 0, 0, 0];
+      case 0x0c: return [0x01, 0x01, 0, 0, 0, 0];
+      case 0x12: return [0x01, actionValue, 0, 0, 0, 0];
+      case 0x06: {
+        const xDpi = (actionValue >> 16) & 0xffff;
+        const yDpi = actionValue & 0xffff;
+        const flags = xDpi !== yDpi ? 0x05 : 0x00;
+        return [0x05, flags, (xDpi >> 8) & 0xff, xDpi & 0xff, (yDpi >> 8) & 0xff, yDpi & 0xff];
+      }
       default: return [0, 0, 0, 0, 0, 0];
     }
   }
@@ -268,6 +300,9 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
             if (at === 0x01) defaultVal = 0x01;
             else if (at === 0x02) defaultVal = 0x04;
             else if (at === 0x0a) defaultVal = 0x00cd;
+            else if (at === 0x0c) defaultVal = 0;
+            else if (at === 0x12) defaultVal = 0x04;
+            else if (at === 0x06) defaultVal = (800 << 16) | 800;
             this.setState({ editActionType: at, editActionValue: defaultVal });
           }}
           style={selectStyle}
