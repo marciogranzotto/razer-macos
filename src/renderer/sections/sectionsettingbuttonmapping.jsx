@@ -9,6 +9,12 @@ const PANEL_NAMES = {
   0x04: '6-Button Side Panel',
 };
 
+const PANEL_GRID = {
+  0x01: { columns: 2, rows: 1 },
+  0x03: { columns: 3, rows: 4 },
+  0x04: { columns: 3, rows: 2 },
+};
+
 const ACTION_TYPES = [
   { value: 0x00, label: 'Disabled' },
   { value: 0x01, label: 'Mouse Button' },
@@ -127,6 +133,22 @@ const selectStyle = {
   outline: 'none',
   cursor: 'pointer',
 };
+
+function gridCellStyle(isSelected) {
+  return {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '8px 4px',
+    borderRadius: '6px',
+    border: isSelected ? '2px solid #47e10c' : '2px solid #35363a',
+    backgroundColor: isSelected ? '#35363a' : '#2a2a2e',
+    cursor: 'pointer',
+    minHeight: '48px',
+    transition: 'border-color 0.15s',
+  };
+}
 
 export class SectionSettingButtonMapping extends SectionSettingBlock {
 
@@ -410,28 +432,32 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
         >Hypershift</button>
       </div>
 
-      {mappings.map(btn => (
-        <div key={btn.id}>
-          <div
-            onClick={() => this.startEditing(btn)}
-            style={{
-              display: 'flex', flexDirection: 'row', alignItems: 'center',
-              padding: '6px 10px', borderBottom: '1px solid #35363a',
-              cursor: 'pointer',
-              backgroundColor: editingButton === btn.id ? '#35363a' : 'transparent',
-            }}
-          >
-            <div style={{ width: '80px', color: '#47e10c', fontSize: '12px' }}>
-              {btn.label}
+      {(() => {
+        const grid = PANEL_GRID[panelType] || { columns: 2, rows: 1 };
+        return <div style={{
+          display: 'grid',
+          gridTemplateColumns: `repeat(${grid.columns}, 1fr)`,
+          gap: '6px',
+          padding: '0 10px 10px',
+        }}>
+          {mappings.map(btn => (
+            <div
+              key={btn.id}
+              onClick={() => this.startEditing(btn)}
+              style={gridCellStyle(editingButton === btn.id)}
+            >
+              <div style={{ color: '#47e10c', fontSize: '11px', fontWeight: 'bold' }}>
+                {btn.label}
+              </div>
+              <div style={{ color: '#999', fontSize: '9px', marginTop: '2px', textAlign: 'center' }}>
+                {describeMapping(btn.mapping)}
+              </div>
             </div>
-            <div style={{ flex: 1, color: 'grey', fontSize: '12px' }}>
-              {describeMapping(btn.mapping)}
-            </div>
-            <span style={{ color: '#666', fontSize: '10px' }}>edit</span>
-          </div>
-          {editingButton === btn.id && this.renderEditor(btn.id)}
-        </div>
-      ))}
+          ))}
+        </div>;
+      })()}
+
+      {editingButton != null && this.renderEditor(editingButton)}
     </div>;
   }
 }
