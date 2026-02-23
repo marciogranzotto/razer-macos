@@ -162,18 +162,11 @@ export class Application {
       currentDevice.setPollRate(pollRate);
     });
 
-    // side panel type
-    ipcMain.on('get-side-panel-type', (event, arg) => {
-      const { device } = arg;
-      const currentDevice = this.razerApplication.deviceManager.getByInternalId(device.internalId);
-      const panelType = currentDevice.getSidePanelType();
-      event.reply('side-panel-type-response', { panelType });
-    });
-
     // button mappings
     ipcMain.on('get-button-mappings', (event, arg) => {
       const { device, panelId, layer } = arg;
       const currentDevice = this.razerApplication.deviceManager.getByInternalId(device.internalId);
+      if (!currentDevice) return;
       const mappings = currentDevice.getAllButtonMappings(panelId, layer);
       event.reply('button-mappings-response', { mappings });
     });
@@ -181,6 +174,7 @@ export class Application {
     ipcMain.on('set-button-mapping', (event, arg) => {
       const { device, buttonId, layer, actionType, params } = arg;
       const currentDevice = this.razerApplication.deviceManager.getByInternalId(device.internalId);
+      if (!currentDevice) return;
       currentDevice.setButtonMapping(buttonId, layer, actionType, params);
       event.reply('button-mapping-updated', { buttonId, layer, actionType, params });
     });
