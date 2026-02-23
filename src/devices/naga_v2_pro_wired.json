@@ -3,11 +3,13 @@
   "productId": "0x00A7",
   "mainType": "mouse",
   "image": "https://assets.razerzone.com/eeimages/support/products/1874/nagav2pro.png",
-  "features": null,
-  "featuresMissing": ["oldMouseEffects","waveSimple"],
-  "featuresConfig": [
-    {
-      "mouseBrightness": {
+  "features": [
+    { "none": null },
+    { "static": null },
+    { "spectrum": null },
+    { "reactive": null },
+    { "breathe": null },
+    { "mouseBrightness": {
         "enabledMatrix": true,
         "enabledLogo": false,
         "enabledScroll": false,
@@ -15,10 +17,9 @@
         "enabledRight": false
       }
     },
-    {
-      "dpi": {
-        "max": 30000
-      }
-    }
+    { "pollRate": null },
+    { "dpi": { "max": 30000 } },
+    { "battery": null },
+    { "buttonMapping": null }
   ]
 }
