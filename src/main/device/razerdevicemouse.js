@@ -40,6 +40,10 @@ export class RazerDeviceMouse extends RazerDevice {
       }
     }
 
+    if(this.hasFeature(FeatureIdentifier.BUTTON_MAPPING)) {
+      this.panelType = this.getSidePanelType();
+    }
+
     return super.init();
   }
 
@@ -206,5 +210,40 @@ export class RazerDeviceMouse extends RazerDevice {
   setPollRate(pollRate) {
     this.pollRate = pollRate;
     this.addon.mouseSetPollRate(this.internalId, this.pollRate);
+  }
+
+  getSidePanelType() {
+    return this.addon.mouseGetSidePanelType(this.internalId);
+  }
+
+  getButtonMapping(buttonId, layer = 0x00) {
+    const raw = this.addon.mouseGetButtonMapping(this.internalId, 0x01, buttonId, layer);
+    return {
+      profile: raw[0],
+      buttonId: raw[1],
+      layer: raw[2],
+      actionType: raw[3],
+      params: [raw[4], raw[5], raw[6], raw[7], raw[8], raw[9]],
+    };
+  }
+
+  setButtonMapping(buttonId, layer, actionType, params) {
+    this.addon.mouseSetButtonMapping(
+      this.internalId, 0x01, buttonId, layer, actionType, params);
+  }
+
+  getButtonsForPanel(panelId) {
+    const feature = this.getFeature(FeatureIdentifier.BUTTON_MAPPING);
+    if (!feature) return [];
+    const panelConfig = feature.configuration.panels[panelId];
+    return panelConfig ? panelConfig.buttons : [];
+  }
+
+  getAllButtonMappings(panelId, layer = 0x00) {
+    const buttons = this.getButtonsForPanel(panelId);
+    return buttons.map(btn => ({
+      ...btn,
+      mapping: this.getButtonMapping(btn.id, layer),
+    }));
   }
 }
