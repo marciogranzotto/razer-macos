@@ -302,7 +302,23 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
   }
 
   applyEdit(buttonId) {
-    const { editActionType, editActionValue, editModifier } = this.state;
+    const { editActionType, editActionValue, editModifier, mappings } = this.state;
+
+    if (editActionType === 'default') {
+      const btn = mappings.find(b => b.id === buttonId);
+      if (btn && btn.defaultAction) {
+        ipcRenderer.send('set-button-mapping', {
+          device: this.deviceSelected,
+          buttonId,
+          layer: this.state.layer,
+          actionType: btn.defaultAction.type,
+          params: btn.defaultAction.params,
+        });
+      }
+      this.setState({ editingButton: null });
+      return;
+    }
+
     const params = this.buildParams(editActionType, editActionValue, editModifier);
     ipcRenderer.send('set-button-mapping', {
       device: this.deviceSelected,
