@@ -10,7 +10,7 @@ const PANEL_NAMES = {
 };
 
 const PANEL_GRID = {
-  0x01: { columns: 2, rows: 1 },
+  0x01: { columns: 1, rows: 2 },
   0x03: { columns: 3, rows: 4 },
   0x04: { columns: 3, rows: 2 },
 };
@@ -76,6 +76,7 @@ const SCROLL_ACTIONS = [
 function describeMapping(mapping) {
   if (!mapping) return 'Unknown';
   const { actionType, params } = mapping;
+  if (!params) return `Type 0x${actionType.toString(16)}`;
   switch (actionType) {
     case 0x00: return 'Disabled';
     case 0x01: {
@@ -271,7 +272,7 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
     switch (mapping.actionType) {
       case 0x01: return mapping.params[1] || 0x01;
       case 0x02: return mapping.params[2] || 0x04;
-      case 0x0a: return (mapping.params[1] << 8) | mapping.params[2] || 0x00cd;
+      case 0x0a: return mapping.params ? ((mapping.params[1] << 8) | mapping.params[2]) : 0x00cd;
       case 0x0c: return 0;
       case 0x12: return mapping.params[1] || 0x04;
       case 0x06: {
@@ -489,6 +490,31 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
     </div>;
   }
 
+  renderButtonGrid(panelType, mappings, editingButton) {
+    const grid = PANEL_GRID[panelType] || { columns: 1, rows: 2 };
+    return <div style={{
+      display: 'grid',
+      gridTemplateColumns: `repeat(${grid.columns}, 1fr)`,
+      gap: '6px',
+      padding: '0 10px 10px',
+    }}>
+      {mappings.map(btn => (
+        <div
+          key={btn.id}
+          onClick={() => this.startEditing(btn)}
+          style={gridCellStyle(editingButton === btn.id)}
+        >
+          <div style={{ color: '#47e10c', fontSize: '11px', fontWeight: 'bold' }}>
+            {btn.label}
+          </div>
+          <div style={{ color: '#999', fontSize: '9px', marginTop: '2px', textAlign: 'center' }}>
+            {describeMapping(btn.mapping)}
+          </div>
+        </div>
+      ))}
+    </div>;
+  }
+
   renderSettings() {
     if (this.buttonMappingFeature == null) {
       return null;
@@ -532,30 +558,7 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
         >Hypershift</button>
       </div>
 
-      {(() => {
-        const grid = PANEL_GRID[panelType] || { columns: 2, rows: 1 };
-        return <div style={{
-          display: 'grid',
-          gridTemplateColumns: `repeat(${grid.columns}, 1fr)`,
-          gap: '6px',
-          padding: '0 10px 10px',
-        }}>
-          {mappings.map(btn => (
-            <div
-              key={btn.id}
-              onClick={() => this.startEditing(btn)}
-              style={gridCellStyle(editingButton === btn.id)}
-            >
-              <div style={{ color: '#47e10c', fontSize: '11px', fontWeight: 'bold' }}>
-                {btn.label}
-              </div>
-              <div style={{ color: '#999', fontSize: '9px', marginTop: '2px', textAlign: 'center' }}>
-                {describeMapping(btn.mapping)}
-              </div>
-            </div>
-          ))}
-        </div>;
-      })()}
+      {this.renderButtonGrid(panelType, mappings, editingButton)}
 
       {editingButton != null && this.renderEditor(editingButton)}
     </div>;
