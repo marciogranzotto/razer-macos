@@ -493,6 +493,48 @@ void MouseSetRightBrightness(const Napi::CallbackInfo &info) {
 }
 
 /**
+* Mouse button mapping
+*/
+
+void MouseSetButtonMapping(const Napi::CallbackInfo &info) {
+    RazerDevice device = getRazerDeviceFor(info);
+    unsigned char profile = info[1].ToNumber().Uint32Value();
+    unsigned char button_id = info[2].ToNumber().Uint32Value();
+    unsigned char layer = info[3].ToNumber().Uint32Value();
+    unsigned char action_type = info[4].ToNumber().Uint32Value();
+    Napi::Array params = info[5].As<Napi::Array>();
+    unsigned char action_params[6] = {0};
+    for (uint32_t i = 0; i < 6 && i < params.Length(); i++) {
+        action_params[i] = params.Get(i).ToNumber().Uint32Value();
+    }
+    razer_mouse_attr_write_button_mapping(
+        device.usbDevice, profile, button_id, layer, action_type, action_params);
+}
+
+Napi::Value MouseGetButtonMapping(const Napi::CallbackInfo &info) {
+    Napi::Env env = info.Env();
+    RazerDevice device = getRazerDeviceFor(info);
+    unsigned char profile = info[1].ToNumber().Uint32Value();
+    unsigned char button_id = info[2].ToNumber().Uint32Value();
+    unsigned char layer = info[3].ToNumber().Uint32Value();
+    unsigned char response[10] = {0};
+    razer_mouse_attr_read_button_mapping(
+        device.usbDevice, profile, button_id, layer, response);
+    Napi::Array result = Napi::Array::New(env, 10);
+    for (int i = 0; i < 10; i++) {
+        result.Set(i, Napi::Number::New(env, response[i]));
+    }
+    return result;
+}
+
+Napi::Value MouseGetSidePanelType(const Napi::CallbackInfo &info) {
+    Napi::Env env = info.Env();
+    RazerDevice device = getRazerDeviceFor(info);
+    unsigned char panel = razer_mouse_attr_read_side_panel_type(device.usbDevice);
+    return Napi::Number::New(env, panel);
+}
+
+/**
 * Mouse docks
 */
 void MouseDockSetModeStatic(const Napi::CallbackInfo &info) {
@@ -937,6 +979,10 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
     exports.Set("mouseSetLeftBrightness", Napi::Function::New(env, MouseSetLeftBrightness));
     exports.Set("mouseGetRightBrightness", Napi::Function::New(env, MouseGetRightBrightness));
     exports.Set("mouseSetRightBrightness", Napi::Function::New(env, MouseSetRightBrightness));
+
+    exports.Set("mouseSetButtonMapping", Napi::Function::New(env, MouseSetButtonMapping));
+    exports.Set("mouseGetButtonMapping", Napi::Function::New(env, MouseGetButtonMapping));
+    exports.Set("mouseGetSidePanelType", Napi::Function::New(env, MouseGetSidePanelType));
 
     exports.Set("mouseDockSetModeNone", Napi::Function::New(env, MouseDockSetModeNone));
     exports.Set("mouseDockSetModeBreathe", Napi::Function::New(env, MouseDockSetModeBreathe));
