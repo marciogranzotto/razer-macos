@@ -186,7 +186,15 @@ export class Application {
       const { device, buttonId, layer, actionType, params } = arg;
       const currentDevice = this.razerApplication.deviceManager.getByInternalId(device.internalId);
       if (!currentDevice) return;
-      currentDevice.setButtonMapping(buttonId, layer, actionType, params);
+
+      if (actionType === 0x0c) {
+        // Hypershift Modifier requires two writes: normal layer + hypershift layer
+        currentDevice.setButtonMapping(buttonId, 0x00, actionType, params);
+        currentDevice.setButtonMapping(buttonId, 0x01, actionType, params);
+      } else {
+        currentDevice.setButtonMapping(buttonId, layer, actionType, params);
+      }
+
       event.reply('button-mapping-updated', { buttonId, layer, actionType, params });
     });
 
