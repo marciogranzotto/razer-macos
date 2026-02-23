@@ -150,6 +150,20 @@ function gridCellStyle(isSelected) {
   };
 }
 
+function pillStyle(isActive) {
+  return {
+    fontSize: '10px',
+    padding: '4px 8px',
+    borderRadius: '12px',
+    border: '1px solid black',
+    backgroundColor: isActive ? '#47e10c' : '#35363a',
+    color: isActive ? 'black' : '#47e10c',
+    cursor: 'pointer',
+    outline: 'none',
+    whiteSpace: 'nowrap',
+  };
+}
+
 export class SectionSettingButtonMapping extends SectionSettingBlock {
 
   constructor(props) {
@@ -305,58 +319,84 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
   }
 
   renderEditor(btnId) {
-    const { editActionType, editActionValue } = this.state;
+    const { editActionType, editActionValue, editModifier, mappings } = this.state;
+    const btn = mappings.find(b => b.id === btnId);
+    const btnLabel = btn ? btn.label : `Button 0x${btnId.toString(16)}`;
 
     return <div style={{
-      padding: '8px 10px',
+      padding: '10px',
       backgroundColor: '#2a2a2e',
-      borderBottom: '1px solid #47e10c',
+      borderTop: '1px solid #47e10c',
+      margin: '0 10px 10px',
+      borderRadius: '0 0 6px 6px',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-        <span style={{ color: '#999', fontSize: '11px', width: '45px' }}>Action:</span>
-        <select
-          value={editActionType}
-          onChange={(e) => {
-            const at = parseInt(e.target.value);
-            let defaultVal = 0;
-            if (at === 0x01) defaultVal = 0x01;
-            else if (at === 0x02) defaultVal = 0x04;
-            else if (at === 0x0a) defaultVal = 0x00cd;
-            else if (at === 0x0c) defaultVal = 0;
-            else if (at === 0x12) defaultVal = 0x04;
-            else if (at === 0x06) defaultVal = (800 << 16) | 800;
-            this.setState({ editActionType: at, editActionValue: defaultVal });
-          }}
-          style={selectStyle}
-        >
-          {ACTION_TYPES.map(at => (
-            <option key={at.value} value={at.value}>{at.label}</option>
-          ))}
-        </select>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+        <span style={{ color: '#47e10c', fontSize: '12px', fontWeight: 'bold' }}>{btnLabel}</span>
+        <div style={{ display: 'flex', gap: '5px' }}>
+          <button onClick={() => this.cancelEditing()} style={btnStyle}>Cancel</button>
+          <button onClick={() => this.applyEdit(btnId)}
+            style={{ ...btnStyle, backgroundColor: '#47e10c', color: 'black' }}
+          >Apply</button>
+        </div>
       </div>
 
+      {/* Action type pills */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '10px' }}>
+        {ACTION_TYPES.map(at => (
+          <button
+            key={at.value}
+            onClick={() => {
+              let defaultVal = 0;
+              if (at.value === 0x01) defaultVal = 0x01;
+              else if (at.value === 0x02) defaultVal = 0x04;
+              else if (at.value === 0x0a) defaultVal = 0x00cd;
+              else if (at.value === 0x12) defaultVal = 0x04;
+              else if (at.value === 0x06) defaultVal = (800 << 16) | 800;
+              this.setState({ editActionType: at.value, editActionValue: defaultVal, editModifier: 0 });
+            }}
+            style={pillStyle(editActionType === at.value)}
+          >{at.label}</button>
+        ))}
+      </div>
+
+      {/* Mouse Button params */}
       {editActionType === 0x01 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-          <span style={{ color: '#999', fontSize: '11px', width: '45px' }}>Button:</span>
-          <select
-            value={editActionValue}
-            onChange={(e) => this.setState({ editActionValue: parseInt(e.target.value) })}
-            style={selectStyle}
-          >
-            {MOUSE_BUTTONS.map(mb => (
-              <option key={mb.value} value={mb.value}>{mb.label}</option>
-            ))}
-          </select>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+          {MOUSE_BUTTONS.map(mb => (
+            <button key={mb.value}
+              onClick={() => this.setState({ editActionValue: mb.value })}
+              style={pillStyle(editActionValue === mb.value)}
+            >{mb.label}</button>
+          ))}
         </div>
       )}
 
+      {/* Keyboard Key params */}
       {editActionType === 0x02 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-          <span style={{ color: '#999', fontSize: '11px', width: '45px' }}>Key:</span>
+        <div>
+          <div style={{ display: 'flex', gap: '10px', marginBottom: '8px', alignItems: 'center' }}>
+            {[
+              { bit: 0x01, label: 'Ctrl' },
+              { bit: 0x02, label: 'Shift' },
+              { bit: 0x04, label: 'Alt' },
+              { bit: 0x08, label: 'Cmd' },
+            ].map(mod => (
+              <label key={mod.bit} style={{ color: '#999', fontSize: '11px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                <input
+                  type="checkbox"
+                  checked={(editModifier & mod.bit) !== 0}
+                  onChange={() => this.setState({ editModifier: editModifier ^ mod.bit })}
+                  style={{ accentColor: '#47e10c' }}
+                />
+                {mod.label}
+              </label>
+            ))}
+          </div>
           <select
             value={editActionValue}
             onChange={(e) => this.setState({ editActionValue: parseInt(e.target.value) })}
-            style={selectStyle}
+            style={{ ...selectStyle, width: '100%' }}
           >
             {KEYBOARD_KEYS.map(kk => (
               <option key={kk.value} value={kk.value}>{kk.label}</option>
@@ -365,27 +405,71 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
         </div>
       )}
 
+      {/* Multimedia params */}
       {editActionType === 0x0a && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-          <span style={{ color: '#999', fontSize: '11px', width: '45px' }}>Media:</span>
-          <select
-            value={editActionValue}
-            onChange={(e) => this.setState({ editActionValue: parseInt(e.target.value) })}
-            style={selectStyle}
-          >
-            {MEDIA_KEYS.map(mk => (
-              <option key={mk.value} value={mk.value}>{mk.label}</option>
-            ))}
-          </select>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+          {MEDIA_KEYS.map(mk => (
+            <button key={mk.value}
+              onClick={() => this.setState({ editActionValue: mk.value })}
+              style={pillStyle(editActionValue === mk.value)}
+            >{mk.label}</button>
+          ))}
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: '5px', justifyContent: 'flex-end' }}>
-        <button onClick={() => this.cancelEditing()} style={btnStyle}>Cancel</button>
-        <button onClick={() => this.applyEdit(btnId)}
-          style={{ ...btnStyle, backgroundColor: '#47e10c', color: 'black' }}
-        >Apply</button>
-      </div>
+      {/* Hypershift info */}
+      {editActionType === 0x0c && (
+        <div style={{ color: '#999', fontSize: '11px' }}>
+          Assigns Hypershift to this button. Both normal and Hypershift layers will be configured.
+        </div>
+      )}
+
+      {/* Scroll Wheel params */}
+      {editActionType === 0x12 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+          {SCROLL_ACTIONS.map(sa => (
+            <button key={sa.value}
+              onClick={() => this.setState({ editActionValue: sa.value })}
+              style={pillStyle(editActionValue === sa.value)}
+            >{sa.label}</button>
+          ))}
+        </div>
+      )}
+
+      {/* Sensitivity Clutch params */}
+      {editActionType === 0x06 && (
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <label style={{ color: '#999', fontSize: '11px' }}>X DPI:
+            <input type="number" min="100" max="30000" step="50"
+              value={(editActionValue >> 16) & 0xffff}
+              onChange={(e) => {
+                const x = parseInt(e.target.value) || 800;
+                const y = editActionValue & 0xffff;
+                this.setState({ editActionValue: (x << 16) | y });
+              }}
+              style={{ ...selectStyle, width: '70px', marginLeft: '4px' }}
+            />
+          </label>
+          <label style={{ color: '#999', fontSize: '11px' }}>Y DPI:
+            <input type="number" min="100" max="30000" step="50"
+              value={editActionValue & 0xffff}
+              onChange={(e) => {
+                const x = (editActionValue >> 16) & 0xffff;
+                const y = parseInt(e.target.value) || 800;
+                this.setState({ editActionValue: (x << 16) | y });
+              }}
+              style={{ ...selectStyle, width: '70px', marginLeft: '4px' }}
+            />
+          </label>
+        </div>
+      )}
+
+      {/* Restore Default info */}
+      {editActionType === 'default' && (
+        <div style={{ color: '#999', fontSize: '11px' }}>
+          Restores the factory default binding for this button.
+        </div>
+      )}
     </div>;
   }
 
