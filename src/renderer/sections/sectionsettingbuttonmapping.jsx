@@ -492,13 +492,18 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
 
   renderButtonGrid(panelType, mappings, editingButton) {
     const grid = PANEL_GRID[panelType] || { columns: 1, rows: 2 };
+    // 6-button panel: second row is physically reversed ([1][2][3] / [6][5][4])
+    let orderedMappings = mappings;
+    if (panelType === 0x04 && mappings.length === 6) {
+      orderedMappings = [...mappings.slice(0, 3), ...mappings.slice(3, 6).reverse()];
+    }
     return <div style={{
       display: 'grid',
       gridTemplateColumns: `repeat(${grid.columns}, 1fr)`,
       gap: '6px',
       padding: '0 10px 10px',
     }}>
-      {mappings.map(btn => (
+      {orderedMappings.map(btn => (
         <div
           key={btn.id}
           onClick={() => this.startEditing(btn)}
