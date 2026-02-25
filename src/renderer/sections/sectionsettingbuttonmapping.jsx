@@ -494,7 +494,7 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
                 }}>
                   {this.state.recordingUnsupported ? 'Key not supported' : 'Press a key...'}
                 </span>
-                <button onClick={() => this.stopRecording()} style={btnStyle}>Cancel</button>
+                <button onMouseDown={(e) => e.preventDefault()} onClick={() => this.stopRecording()} style={btnStyle}>Cancel</button>
               </div>
 
               {/* Hidden input to capture keyboard events */}
