@@ -2,6 +2,7 @@ import React from 'react';
 import { SectionSettingBlock } from './sectionsettingblock';
 import { ipcRenderer } from 'electron';
 import { FeatureIdentifier } from '../../main/feature/featureidentifier';
+import { KEYBOARD_KEYS, CODE_TO_HID, MODIFIER_CODES, KEY_CATEGORIES } from '../data/keyboardkeys';
 
 const PANEL_NAMES = {
   0x01: '2-Button Side Panel',
@@ -34,31 +35,6 @@ const MOUSE_BUTTONS = [
   { value: 0x05, label: 'Forward' },
 ];
 
-const KEYBOARD_KEYS = [
-  { value: 0x04, label: 'A' }, { value: 0x05, label: 'B' }, { value: 0x06, label: 'C' },
-  { value: 0x07, label: 'D' }, { value: 0x08, label: 'E' }, { value: 0x09, label: 'F' },
-  { value: 0x0a, label: 'G' }, { value: 0x0b, label: 'H' }, { value: 0x0c, label: 'I' },
-  { value: 0x0d, label: 'J' }, { value: 0x0e, label: 'K' }, { value: 0x0f, label: 'L' },
-  { value: 0x10, label: 'M' }, { value: 0x11, label: 'N' }, { value: 0x12, label: 'O' },
-  { value: 0x13, label: 'P' }, { value: 0x14, label: 'Q' }, { value: 0x15, label: 'R' },
-  { value: 0x16, label: 'S' }, { value: 0x17, label: 'T' }, { value: 0x18, label: 'U' },
-  { value: 0x19, label: 'V' }, { value: 0x1a, label: 'W' }, { value: 0x1b, label: 'X' },
-  { value: 0x1c, label: 'Y' }, { value: 0x1d, label: 'Z' },
-  { value: 0x1e, label: '1' }, { value: 0x1f, label: '2' }, { value: 0x20, label: '3' },
-  { value: 0x21, label: '4' }, { value: 0x22, label: '5' }, { value: 0x23, label: '6' },
-  { value: 0x24, label: '7' }, { value: 0x25, label: '8' }, { value: 0x26, label: '9' },
-  { value: 0x27, label: '0' },
-  { value: 0x2d, label: '-' }, { value: 0x2e, label: '=' },
-  { value: 0x3a, label: 'F1' }, { value: 0x3b, label: 'F2' }, { value: 0x3c, label: 'F3' },
-  { value: 0x3d, label: 'F4' }, { value: 0x3e, label: 'F5' }, { value: 0x3f, label: 'F6' },
-  { value: 0x40, label: 'F7' }, { value: 0x41, label: 'F8' }, { value: 0x42, label: 'F9' },
-  { value: 0x43, label: 'F10' }, { value: 0x44, label: 'F11' }, { value: 0x45, label: 'F12' },
-  { value: 0x28, label: 'Enter' }, { value: 0x29, label: 'Escape' },
-  { value: 0x2a, label: 'Backspace' }, { value: 0x2b, label: 'Tab' },
-  { value: 0x2c, label: 'Space' },
-  { value: 0x4f, label: 'Right Arrow' }, { value: 0x50, label: 'Left Arrow' },
-  { value: 0x51, label: 'Down Arrow' }, { value: 0x52, label: 'Up Arrow' },
-];
 
 const MEDIA_KEYS = [
   { value: 0x00cd, label: 'Play/Pause' },
@@ -415,8 +391,12 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
             onChange={(e) => this.setState({ editActionValue: parseInt(e.target.value) })}
             style={{ ...selectStyle, width: '100%' }}
           >
-            {KEYBOARD_KEYS.map(kk => (
-              <option key={kk.value} value={kk.value}>{kk.label}</option>
+            {KEY_CATEGORIES.map(cat => (
+              <optgroup key={cat} label={cat}>
+                {KEYBOARD_KEYS.filter(k => k.category === cat).map(kk => (
+                  <option key={kk.value} value={kk.value}>{kk.label}</option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </div>
