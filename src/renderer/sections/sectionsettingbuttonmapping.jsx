@@ -462,37 +462,100 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
       {/* Keyboard Key params */}
       {editActionType === 0x02 && (
         <div>
-          <div style={{ display: 'flex', gap: '10px', marginBottom: '8px', alignItems: 'center' }}>
-            {[
-              { bit: 0x01, label: 'Ctrl' },
-              { bit: 0x02, label: 'Shift' },
-              { bit: 0x04, label: 'Alt' },
-              { bit: 0x08, label: 'Cmd' },
-            ].map(mod => (
-              <label key={mod.bit} style={{ color: '#999', fontSize: '11px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                <input
-                  type="checkbox"
-                  checked={(editModifier & mod.bit) !== 0}
-                  onChange={() => this.setState({ editModifier: editModifier ^ mod.bit })}
-                  style={{ accentColor: '#47e10c' }}
-                />
-                {mod.label}
-              </label>
-            ))}
-          </div>
-          <select
-            value={editActionValue}
-            onChange={(e) => this.setState({ editActionValue: parseInt(e.target.value) })}
-            style={{ ...selectStyle, width: '100%' }}
-          >
-            {KEY_CATEGORIES.map(cat => (
-              <optgroup key={cat} label={cat}>
-                {KEYBOARD_KEYS.filter(k => k.category === cat).map(kk => (
-                  <option key={kk.value} value={kk.value}>{kk.label}</option>
+          {this.state.recording ? (
+            // Recording mode
+            <div>
+              {/* Live modifier badges */}
+              <div style={{ display: 'flex', gap: '6px', marginBottom: '8px', alignItems: 'center' }}>
+                {[
+                  { bit: 0x01, label: 'Ctrl' },
+                  { bit: 0x02, label: 'Shift' },
+                  { bit: 0x04, label: 'Alt' },
+                  { bit: 0x08, label: 'Cmd' },
+                ].map(mod => (
+                  <span key={mod.bit} style={{
+                    fontSize: '10px',
+                    padding: '3px 8px',
+                    borderRadius: '10px',
+                    backgroundColor: (this.state.recordingModifiers & mod.bit) ? '#47e10c' : '#35363a',
+                    color: (this.state.recordingModifiers & mod.bit) ? 'black' : '#555',
+                    border: '1px solid #555',
+                    transition: 'all 0.1s',
+                  }}>{mod.label}</span>
                 ))}
-              </optgroup>
-            ))}
-          </select>
+              </div>
+
+              {/* Capture prompt + cancel */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{
+                  color: this.state.recordingUnsupported ? '#ff4444' : '#999',
+                  fontSize: '12px',
+                  animation: this.state.recordingUnsupported ? 'none' : 'pulse 1.5s ease-in-out infinite',
+                }}>
+                  {this.state.recordingUnsupported ? 'Key not supported' : 'Press a key...'}
+                </span>
+                <button onClick={() => this.stopRecording()} style={btnStyle}>Cancel</button>
+              </div>
+
+              {/* Hidden input to capture keyboard events */}
+              <input
+                ref={el => el && el.focus()}
+                onKeyDown={this.handleRecordKeyDown}
+                onKeyUp={this.handleRecordKeyUp}
+                onBlur={(e) => e.target.focus()}
+                style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }}
+              />
+            </div>
+          ) : (
+            // Normal mode: modifier checkboxes + dropdown + record button
+            <div>
+              <div style={{ display: 'flex', gap: '10px', marginBottom: '8px', alignItems: 'center' }}>
+                {[
+                  { bit: 0x01, label: 'Ctrl' },
+                  { bit: 0x02, label: 'Shift' },
+                  { bit: 0x04, label: 'Alt' },
+                  { bit: 0x08, label: 'Cmd' },
+                ].map(mod => (
+                  <label key={mod.bit} style={{ color: '#999', fontSize: '11px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                    <input
+                      type="checkbox"
+                      checked={(editModifier & mod.bit) !== 0}
+                      onChange={() => this.setState({ editModifier: editModifier ^ mod.bit })}
+                      style={{ accentColor: '#47e10c' }}
+                    />
+                    {mod.label}
+                  </label>
+                ))}
+                <div style={{ flex: 1 }} />
+                <button
+                  onClick={() => this.startRecording()}
+                  style={{ ...btnStyle, display: 'flex', alignItems: 'center', gap: '4px' }}
+                >
+                  <span style={{
+                    display: 'inline-block',
+                    width: '6px',
+                    height: '6px',
+                    borderRadius: '50%',
+                    backgroundColor: '#ff4444',
+                  }} />
+                  Record
+                </button>
+              </div>
+              <select
+                value={editActionValue}
+                onChange={(e) => this.setState({ editActionValue: parseInt(e.target.value) })}
+                style={{ ...selectStyle, width: '100%' }}
+              >
+                {KEY_CATEGORIES.map(cat => (
+                  <optgroup key={cat} label={cat}>
+                    {KEYBOARD_KEYS.filter(k => k.category === cat).map(kk => (
+                      <option key={kk.value} value={kk.value}>{kk.label}</option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       )}
 

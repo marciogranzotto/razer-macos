@@ -280,3 +280,7 @@ ol {
 .state-selector > div:last-child {
   flex:1;
 }
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
