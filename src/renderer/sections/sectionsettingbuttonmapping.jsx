@@ -156,12 +156,20 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
       editActionType: 0x00,
       editActionValue: 0,
       editModifier: 0,
+      recording: false,
+      recordingModifiers: 0,
+      recordingUnsupported: false,
     };
+
+    this.nonModifierPressed = false;
+    this.unsupportedTimer = null;
 
     this.handleMappingsResponse = this.handleMappingsResponse.bind(this);
     this.handleMappingUpdated = this.handleMappingUpdated.bind(this);
     this.handlePanelTypeResponse = this.handlePanelTypeResponse.bind(this);
     this.handlePanelChanged = this.handlePanelChanged.bind(this);
+    this.handleRecordKeyDown = this.handleRecordKeyDown.bind(this);
+    this.handleRecordKeyUp = this.handleRecordKeyUp.bind(this);
   }
 
   componentDidMount() {
@@ -177,11 +185,16 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
     ipcRenderer.removeListener('button-mapping-updated', this.handleMappingUpdated);
     ipcRenderer.removeListener('side-panel-type-response', this.handlePanelTypeResponse);
     ipcRenderer.removeListener('panel-type-changed', this.handlePanelChanged);
+    if (this.unsupportedTimer) {
+      clearTimeout(this.unsupportedTimer);
+      this.unsupportedTimer = null;
+    }
   }
 
   handlePanelTypeResponse(event, data) {
     const newPanel = data.panelType || null;
     if (newPanel !== this.state.panelType) {
+      this.stopRecording();
       this.setState({ panelType: newPanel, mappings: [], editingButton: null }, () => {
         this.requestMappings();
       });
@@ -191,6 +204,7 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
   handlePanelChanged(event, data) {
     if (data.productId !== this.deviceSelected.productId) return;
     const newPanel = data.panelId || null;
+    this.stopRecording();
     this.setState({ panelType: newPanel, mappings: [], editingButton: null }, () => {
       this.requestMappings();
     });
@@ -224,12 +238,14 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
   }
 
   switchLayer(layer) {
+    this.stopRecording();
     this.setState({ layer, editingButton: null }, () => {
       this.requestMappings();
     });
   }
 
   startEditing(btn) {
+    this.stopRecording();
     const mapping = btn.mapping || {};
     this.setState({
       editingButton: btn.id,
@@ -240,7 +256,85 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
   }
 
   cancelEditing() {
+    this.stopRecording();
     this.setState({ editingButton: null });
+  }
+
+  startRecording() {
+    this.nonModifierPressed = false;
+    this.setState({ recording: true, recordingModifiers: 0, recordingUnsupported: false });
+  }
+
+  stopRecording() {
+    this.nonModifierPressed = false;
+    if (this.unsupportedTimer) {
+      clearTimeout(this.unsupportedTimer);
+      this.unsupportedTimer = null;
+    }
+    this.setState({ recording: false, recordingModifiers: 0, recordingUnsupported: false });
+  }
+
+  handleRecordKeyDown(event) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (MODIFIER_CODES.has(event.code)) {
+      // Modifier pressed — update live display, wait for more input
+      const mods = (event.ctrlKey ? 0x01 : 0)
+                 | (event.shiftKey ? 0x02 : 0)
+                 | (event.altKey ? 0x04 : 0)
+                 | (event.metaKey ? 0x08 : 0);
+      this.setState({ recordingModifiers: mods });
+      return;
+    }
+
+    // Non-modifier pressed
+    this.nonModifierPressed = true;
+    const hidCode = CODE_TO_HID[event.code];
+
+    if (hidCode === undefined) {
+      // Key not in HID keyboard page — flash warning
+      this.setState({ recordingUnsupported: true });
+      if (this.unsupportedTimer) clearTimeout(this.unsupportedTimer);
+      this.unsupportedTimer = setTimeout(() => {
+        this.setState({ recordingUnsupported: false });
+        this.unsupportedTimer = null;
+      }, 1500);
+      return;
+    }
+
+    const modifier = (event.ctrlKey ? 0x01 : 0)
+                   | (event.shiftKey ? 0x02 : 0)
+                   | (event.altKey ? 0x04 : 0)
+                   | (event.metaKey ? 0x08 : 0);
+
+    this.setState({
+      editActionValue: hidCode,
+      editModifier: modifier,
+      recording: false,
+      recordingModifiers: 0,
+      recordingUnsupported: false,
+    });
+  }
+
+  handleRecordKeyUp(event) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (!MODIFIER_CODES.has(event.code)) return;
+    if (this.nonModifierPressed) return;
+
+    // Modifier released with no non-modifier pressed — capture standalone modifier
+    const hidCode = CODE_TO_HID[event.code];
+    if (hidCode === undefined) return;
+
+    this.setState({
+      editActionValue: hidCode,
+      editModifier: 0,
+      recording: false,
+      recordingModifiers: 0,
+      recordingUnsupported: false,
+    });
   }
 
   getValueFromMapping(mapping) {
