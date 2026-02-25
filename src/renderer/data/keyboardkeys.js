@@ -67,6 +67,8 @@ export const KEYBOARD_KEYS = [
   { value: 0x36, label: ',', category: 'Punctuation', code: 'Comma' },
   { value: 0x37, label: '.', category: 'Punctuation', code: 'Period' },
   { value: 0x38, label: '/', category: 'Punctuation', code: 'Slash' },
+  { value: 0x32, label: 'Non-US #', category: 'Punctuation', code: 'IntlBackslash' },
+  { value: 0x64, label: 'Non-US \\', category: 'Punctuation', code: 'IntlRo' },
 
   // Navigation
   { value: 0x49, label: 'Insert', category: 'Navigation', code: 'Insert' },

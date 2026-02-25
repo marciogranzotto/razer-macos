@@ -49,6 +49,13 @@ const SCROLL_ACTIONS = [
   { value: 0x04, label: 'Cycle Up Scroll Stages' },
 ];
 
+const MODIFIER_DEFS = [
+  { bit: 0x01, label: 'Ctrl' },
+  { bit: 0x02, label: 'Shift' },
+  { bit: 0x04, label: 'Alt' },
+  { bit: 0x08, label: 'Cmd' },
+];
+
 function describeMapping(mapping) {
   if (!mapping) return 'Unknown';
   const { actionType, params } = mapping;
@@ -467,12 +474,7 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
             <div>
               {/* Live modifier badges */}
               <div style={{ display: 'flex', gap: '6px', marginBottom: '8px', alignItems: 'center' }}>
-                {[
-                  { bit: 0x01, label: 'Ctrl' },
-                  { bit: 0x02, label: 'Shift' },
-                  { bit: 0x04, label: 'Alt' },
-                  { bit: 0x08, label: 'Cmd' },
-                ].map(mod => (
+                {MODIFIER_DEFS.map(mod => (
                   <span key={mod.bit} style={{
                     fontSize: '10px',
                     padding: '3px 8px',
@@ -510,12 +512,7 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
             // Normal mode: modifier checkboxes + dropdown + record button
             <div>
               <div style={{ display: 'flex', gap: '10px', marginBottom: '8px', alignItems: 'center' }}>
-                {[
-                  { bit: 0x01, label: 'Ctrl' },
-                  { bit: 0x02, label: 'Shift' },
-                  { bit: 0x04, label: 'Alt' },
-                  { bit: 0x08, label: 'Cmd' },
-                ].map(mod => (
+                {MODIFIER_DEFS.map(mod => (
                   <label key={mod.bit} style={{ color: '#999', fontSize: '11px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}>
                     <input
                       type="checkbox"
