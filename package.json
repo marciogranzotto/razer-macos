@@ -60,6 +60,9 @@
     "appId": "com.electron.razer-macos",
     "productName": "Razer macOS",
     "nodeGypRebuild": true,
+    "asarUnpack": [
+      "**/*.node"
+    ],
     "directories": {
       "output": "dist",
       "buildResources": "resources"
