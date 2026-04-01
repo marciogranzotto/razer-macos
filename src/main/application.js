@@ -175,27 +175,91 @@ export class Application {
     });
 
     ipcMain.on('get-button-mappings', (event, arg) => {
-      const { device, panelId, layer } = arg;
+      const { device, panelId, layer, profile } = arg;
       const currentDevice = this.razerApplication.deviceManager.getByInternalId(device.internalId);
       if (!currentDevice) return;
-      const mappings = currentDevice.getAllButtonMappings(panelId, layer);
+      const mappings = currentDevice.getAllButtonMappings(panelId, layer, profile || null);
       event.reply('button-mappings-response', { mappings });
     });
 
     ipcMain.on('set-button-mapping', (event, arg) => {
-      const { device, buttonId, layer, actionType, params } = arg;
+      const { device, buttonId, layer, actionType, params, profile } = arg;
       const currentDevice = this.razerApplication.deviceManager.getByInternalId(device.internalId);
       if (!currentDevice) return;
 
       if (actionType === 0x0c) {
-        // Hypershift Modifier requires two writes: normal layer + hypershift layer
-        currentDevice.setButtonMapping(buttonId, 0x00, actionType, params);
-        currentDevice.setButtonMapping(buttonId, 0x01, actionType, params);
+        currentDevice.setButtonMapping(buttonId, 0x00, actionType, params, profile || null);
+        currentDevice.setButtonMapping(buttonId, 0x01, actionType, params, profile || null);
       } else {
-        currentDevice.setButtonMapping(buttonId, layer, actionType, params);
+        currentDevice.setButtonMapping(buttonId, layer, actionType, params, profile || null);
       }
 
       event.reply('button-mapping-updated', { buttonId, layer, actionType, params });
+    });
+
+    ipcMain.on('get-active-profile', (event, arg) => {
+      const { device } = arg;
+      const currentDevice = this.razerApplication.deviceManager.getByInternalId(device.internalId);
+      if (!currentDevice) return;
+      event.reply('active-profile-response', {
+        profile: currentDevice.activeProfile,
+        slotOccupied: currentDevice.slotOccupied,
+      });
+    });
+
+    ipcMain.on('switch-profile', (event, arg) => {
+      const { device, profile } = arg;
+      const currentDevice = this.razerApplication.deviceManager.getByInternalId(device.internalId);
+      if (!currentDevice) return;
+      try {
+        currentDevice.switchProfile(profile);
+        event.reply('profile-switched', { profile });
+      } catch (e) {
+        event.reply('profile-switched', { profile, error: e.message });
+      }
+    });
+
+    ipcMain.on('save-to-slot', (event, arg) => {
+      const { device, targetSlot } = arg;
+      const currentDevice = this.razerApplication.deviceManager.getByInternalId(device.internalId);
+      if (!currentDevice) return;
+      try {
+        currentDevice.saveToSlot(targetSlot);
+        event.reply('slot-saved', { targetSlot, slotOccupied: currentDevice.slotOccupied });
+      } catch (e) {
+        event.reply('slot-saved', { targetSlot, error: e.message });
+      }
+    });
+
+    ipcMain.on('clear-slot', (event, arg) => {
+      const { device, slot } = arg;
+      const currentDevice = this.razerApplication.deviceManager.getByInternalId(device.internalId);
+      if (!currentDevice) return;
+      try {
+        currentDevice.clearSlot(slot);
+        event.reply('slot-cleared', {
+          slot,
+          slotOccupied: currentDevice.slotOccupied,
+          activeProfile: currentDevice.activeProfile,
+        });
+      } catch (e) {
+        event.reply('slot-cleared', { slot, error: e.message });
+      }
+    });
+
+    ipcMain.on('get-all-profile-mappings', (event, arg) => {
+      const { device, panelId, layer } = arg;
+      const currentDevice = this.razerApplication.deviceManager.getByInternalId(device.internalId);
+      if (!currentDevice) return;
+      const profiles = {};
+      for (let slot = 1; slot <= 5; slot++) {
+        try {
+          profiles[slot] = currentDevice.getAllButtonMappings(panelId, layer, slot);
+        } catch (e) {
+          profiles[slot] = [];
+        }
+      }
+      event.reply('all-profile-mappings-response', { profiles });
     });
 
     //state manager
