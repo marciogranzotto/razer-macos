@@ -284,3 +284,10 @@ ol {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
 }
+.profile-slot:hover .profile-slot-clear {
+  display: block !important;
+}
+.profile-slot-clear:hover {
+  background: #ff4444 !important;
+  color: #fff !important;
+}

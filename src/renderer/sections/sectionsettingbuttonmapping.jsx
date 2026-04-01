@@ -166,6 +166,9 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
       recording: false,
       recordingModifiers: 0,
       recordingUnsupported: false,
+      activeProfile: 1,
+      slotOccupied: { 1: true, 2: false, 3: false, 4: false, 5: false },
+      profileSwitching: false,
     };
 
     this.nonModifierPressed = false;
@@ -185,6 +188,49 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
     ipcRenderer.on('side-panel-type-response', this.handlePanelTypeResponse);
     ipcRenderer.on('panel-type-changed', this.handlePanelChanged);
     this.refreshPanelType();
+
+    ipcRenderer.send('get-active-profile', { device: this.deviceSelected });
+
+    ipcRenderer.on('active-profile-response', (event, arg) => {
+      this.setState({
+        activeProfile: arg.profile,
+        slotOccupied: arg.slotOccupied,
+      });
+    });
+
+    ipcRenderer.on('profile-switched', (event, arg) => {
+      if (!arg.error) {
+        this.setState({ activeProfile: arg.profile, profileSwitching: false }, () => {
+          this.requestMappings();
+        });
+      } else {
+        this.setState({ profileSwitching: false });
+      }
+    });
+
+    ipcRenderer.on('slot-saved', (event, arg) => {
+      if (!arg.error) {
+        this.setState({ slotOccupied: arg.slotOccupied, profileSwitching: false });
+      } else {
+        this.setState({ profileSwitching: false });
+      }
+    });
+
+    ipcRenderer.on('slot-cleared', (event, arg) => {
+      if (!arg.error) {
+        // Capture before setState overwrites activeProfile
+        const needsRefetch = (arg.slot === this.state.activeProfile);
+        this.setState({
+          slotOccupied: arg.slotOccupied,
+          activeProfile: arg.activeProfile,
+          profileSwitching: false,
+        }, () => {
+          if (needsRefetch) this.requestMappings();
+        });
+      } else {
+        this.setState({ profileSwitching: false });
+      }
+    });
   }
 
   componentWillUnmount() {
@@ -192,6 +238,10 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
     ipcRenderer.removeListener('button-mapping-updated', this.handleMappingUpdated);
     ipcRenderer.removeListener('side-panel-type-response', this.handlePanelTypeResponse);
     ipcRenderer.removeListener('panel-type-changed', this.handlePanelChanged);
+    ipcRenderer.removeAllListeners('active-profile-response');
+    ipcRenderer.removeAllListeners('profile-switched');
+    ipcRenderer.removeAllListeners('slot-saved');
+    ipcRenderer.removeAllListeners('slot-cleared');
     if (this.unsupportedTimer) {
       clearTimeout(this.unsupportedTimer);
       this.unsupportedTimer = null;
@@ -408,8 +458,99 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
     this.setState({ editingButton: null });
   }
 
+  handleSlotClick(slot) {
+    if (this.state.profileSwitching) return;
+    const { activeProfile, slotOccupied } = this.state;
+
+    if (!slotOccupied[slot]) {
+      if (window.confirm('Save current profile to this slot?')) {
+        this.setState({ profileSwitching: true });
+        ipcRenderer.send('save-to-slot', { device: this.deviceSelected, targetSlot: slot });
+      }
+    } else if (slot !== activeProfile) {
+      this.setState({ profileSwitching: true });
+      ipcRenderer.send('switch-profile', { device: this.deviceSelected, profile: slot });
+    }
+  }
+
+  handleSlotClear(e, slot) {
+    e.stopPropagation();
+    if (this.state.profileSwitching) return;
+    if (slot === 1) return;
+    if (window.confirm('Clear this profile slot?')) {
+      this.setState({ profileSwitching: true });
+      ipcRenderer.send('clear-slot', { device: this.deviceSelected, slot });
+    }
+  }
+
   renderTitle() {
     return 'Side Button Mapping';
+  }
+
+  renderProfileSelector() {
+    const { activeProfile, slotOccupied, profileSwitching } = this.state;
+    const slotColors = {
+      1: '#ffffff',
+      2: '#ff4444',
+      3: '#44cc44',
+      4: '#4488ff',
+      5: '#44dddd',
+    };
+
+    return (
+      <div style={{ display: 'flex', padding: '0 10px 10px', gap: '6px', alignItems: 'center' }}>
+        <span style={{ fontSize: '11px', color: '#aaa', marginRight: '4px' }}>Profiles</span>
+        {[1, 2, 3, 4, 5].map(slot => {
+          const isActive = slot === activeProfile;
+          const isOccupied = slotOccupied[slot];
+          const color = slotColors[slot];
+
+          return (
+            <div
+              key={slot}
+              onClick={() => this.handleSlotClick(slot)}
+              style={{
+                position: 'relative',
+                width: '32px',
+                height: '36px',
+                cursor: profileSwitching ? 'wait' : 'pointer',
+                opacity: isOccupied ? 1 : 0.35,
+                transition: 'opacity 0.15s',
+              }}
+              className={`profile-slot ${isActive ? 'profile-slot-active' : ''}`}
+            >
+              <svg width="32" height="36" viewBox="0 0 32 36" fill="none">
+                <rect x="1" y="4" width="30" height="28" rx="3"
+                  stroke={isActive ? color : '#888'} strokeWidth={isActive ? '2' : '1'}
+                  fill={isActive ? 'rgba(255,255,255,0.08)' : 'transparent'} />
+                <rect x="6" y="1" width="20" height="6" rx="1"
+                  fill={isActive ? color : '#888'} opacity={isActive ? '0.8' : '0.4'} />
+                <circle cx="16" cy="20" r="4"
+                  fill={color} opacity={isOccupied ? '1' : '0.3'} />
+              </svg>
+              <span style={{
+                position: 'absolute', bottom: '2px', left: '0', right: '0',
+                textAlign: 'center', fontSize: '9px',
+                color: isActive ? color : '#888',
+              }}>{slot}</span>
+              {isOccupied && slot !== 1 && (
+                <div
+                  className="profile-slot-clear"
+                  onClick={(e) => this.handleSlotClear(e, slot)}
+                  style={{
+                    position: 'absolute', top: '-4px', right: '-4px',
+                    width: '16px', height: '16px', borderRadius: '50%',
+                    background: '#444', color: '#ccc', fontSize: '10px',
+                    lineHeight: '16px', textAlign: 'center',
+                    display: 'none', cursor: 'pointer',
+                  }}
+                >&times;</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
   }
 
   renderEditor(btnId) {
@@ -675,6 +816,8 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
         <span style={{ color: '#47e10c', fontSize: '13px' }}>{panelName}</span>
         <button onClick={() => this.refreshPanelType()} style={btnStyle}>Refresh</button>
       </div>
+
+      {this.renderProfileSelector()}
 
       <div style={{ display: 'flex', padding: '0 10px 10px', gap: '5px' }}>
         <button
