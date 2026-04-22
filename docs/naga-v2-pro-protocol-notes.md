@@ -198,7 +198,6 @@ Phase 2 probes that will confirm: indirectly by 2.2 (verify slot 1 is preserved 
 ### Probe 1: SET_PROFILE active-slot verification
 
 Ran: `node scripts/probes/naga-v2-pro-probe.js set-profile`
-Output: `/tmp/probe-set-profile.txt`.
 
 Salient observations (full output):
 

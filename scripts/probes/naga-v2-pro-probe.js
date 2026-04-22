@@ -39,21 +39,25 @@ function findNaga() {
   return naga.internalDeviceId;
 }
 
+// Module-scope helper: read per-slot DPI via mouseGetDpiProfile for all 5 slots.
+// Prints each reading with the given tag. Non-destructive — reads all 5 even if
+// slot 2 is off-limits for writes. Returns nothing.
+function readAllDpiSlots(id, tag) {
+  const readings = [1, 2, 3, 4, 5].map(s => {
+    const r = addon.mouseGetDpiProfile(id, s);
+    return `slot${s}=${r.x}`;
+  });
+  console.log(`  ${tag}: ${readings.join(', ')}`);
+}
+
 function probeSetProfile() {
   const id = findNaga();
-  const readAllSlots = (tag) => {
-    const readings = [1, 2, 3, 4, 5].map(s => {
-      const r = addon.mouseGetDpiProfile(id, s);
-      return `slot${s}=${r.x}`;
-    });
-    console.log(`  ${tag}: ${readings.join(', ')}`);
-  };
 
   console.log('Probe 1: SET_PROFILE active-slot verification');
   console.log('Baseline (no intervention):');
   console.log('  getActiveProfile():', addon.mouseGetActiveProfile(id));
   console.log('  standard mouseGetDpi():', addon.mouseGetDpi(id));
-  readAllSlots('per-slot reads');
+  readAllDpiSlots(id, 'per-slot reads');
 
   // Slot 2 intentionally skipped per user's hardware constraint.
   for (const target of [3, 4, 5, 1]) {
@@ -61,7 +65,7 @@ function probeSetProfile() {
     addon.mouseSetActiveProfile(id, target);
     console.log('  getActiveProfile():', addon.mouseGetActiveProfile(id));
     console.log('  standard mouseGetDpi():', addon.mouseGetDpi(id));
-    readAllSlots('per-slot reads');
+    readAllDpiSlots(id, 'per-slot reads');
   }
 }
 
