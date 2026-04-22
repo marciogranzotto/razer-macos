@@ -631,6 +631,7 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
   }
 
   handleDragLeave(e, btn) {
+    if (e.currentTarget.contains(e.relatedTarget)) return;
     if (this.state.dropTargetId === btn.id) {
       this.setState({ dropTargetId: null });
     }
