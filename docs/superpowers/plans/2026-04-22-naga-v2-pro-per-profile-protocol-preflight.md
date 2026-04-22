@@ -15,6 +15,8 @@
 - The C addon already built (`yarn` has been run once; `build/Release/addon.node` exists). If not: `yarn && yarn rebuild` — requires Node 16 per `.nvmrc`.
 - Python 3 available (`python3 --version` succeeds).
 
+**Hardware constraint (user-set):** Slot 2 must NOT be written to or left as the active slot during probes. Probes may READ slot 2 (non-destructive) to establish baseline state, but any iteration that issues `SET_PROFILE` or writes DPI / button mappings must skip slot 2. Slots 1, 3, 4, 5 are available for testing. Every probe in Phase 2 is written with this constraint applied.
+
 ---
 
 ## Phase 1 — Capture Analysis
@@ -650,7 +652,8 @@ function probeSetProfile() {
   console.log('  standard mouseGetDpi():', addon.mouseGetDpi(id));
   readAllSlots('per-slot reads');
 
-  for (const target of [2, 3, 4, 5, 1]) {
+  // Slot 2 intentionally skipped per user's hardware constraint.
+  for (const target of [3, 4, 5, 1]) {
     console.log(`\nSET_PROFILE(${target}):`);
     addon.mouseSetActiveProfile(id, target);
     console.log('  getActiveProfile():', addon.mouseGetActiveProfile(id));
@@ -720,7 +723,8 @@ function probeGetActive() {
   const id = findNaga();
   console.log('Probe 2: GET_ACTIVE_PROFILE semantics');
   console.log('At rest:', addon.mouseGetActiveProfile(id));
-  for (const target of [1, 2, 3, 4, 5]) {
+  // Slot 2 intentionally skipped per user's hardware constraint.
+  for (const target of [1, 3, 4, 5]) {
     addon.mouseSetActiveProfile(id, target);
     const after = addon.mouseGetActiveProfile(id);
     console.log(`  After SET_PROFILE(${target}): getActive=${after}  (match=${after === target ? 'yes' : 'NO — off by ' + (target - after)})`);
@@ -786,12 +790,14 @@ function probeSetDpiArgs() {
   addon.mouseSetActiveProfile(id, 1);
   console.log(`\nInitial state: active=${addon.mouseGetActiveProfile(id)}, standard DPI=${addon.mouseGetDpi(id)}`);
 
-  for (const slotArg of [1, 2, 3, 4, 5]) {
-    const marker = 1000 + slotArg * 111;  // 1111, 1222, 1333, 1444, 1555 — distinctive
+  // Slot 2 intentionally skipped per user's hardware constraint — no writes to slot 2, no SET_PROFILE(2).
+  for (const slotArg of [1, 3, 4, 5]) {
+    const marker = 1000 + slotArg * 111;  // 1111, 1333, 1444, 1555 — distinctive
     console.log(`\nA. mouseSetDpiProfile(slotArg=${slotArg}, dpi=${marker}) — NO prior SET_PROFILE`);
     addon.mouseSetDpiProfile(id, slotArg, marker, marker);
     console.log(`  standard mouseGetDpi (currently active slot): ${addon.mouseGetDpi(id)}`);
     [1, 2, 3, 4, 5].forEach(s => {
+      // Reads across all 5 slots (including 2) are non-destructive and valuable for baseline evidence.
       const r = addon.mouseGetDpiProfile(id, s);
       console.log(`  per-slot getDpiProfile(${s}): x=${r.x}`);
     });
@@ -807,9 +813,9 @@ function probeSetDpiArgs() {
     });
   }
 
-  // Verify cross-slot retention: SET_PROFILE back to 1, did the marker writes persist?
-  console.log('\nFinal cross-slot retention check:');
-  for (const s of [1, 2, 3, 4, 5]) {
+  // Verify cross-slot retention: iterate SET_PROFILE (skipping slot 2), did the marker writes persist?
+  console.log('\nFinal cross-slot retention check (slot 2 skipped):');
+  for (const s of [1, 3, 4, 5]) {
     addon.mouseSetActiveProfile(id, s);
     console.log(`  After SET_PROFILE(${s}): standard mouseGetDpi = ${addon.mouseGetDpi(id)}`);
   }
@@ -887,7 +893,8 @@ function probeSetBtnArgs() {
   addon.mouseSetActiveProfile(id, 1);
   readAll('initial state (active=1)');
 
-  for (const slotArg of [1, 2, 3, 4, 5]) {
+  // Slot 2 intentionally skipped per user's hardware constraint — no writes to slot 2, no SET_PROFILE(2).
+  for (const slotArg of [1, 3, 4, 5]) {
     console.log(`\nA. mouseSetButtonMapping(slotArg=${slotArg}, params=${markerParams(slotArg)}) — NO prior SET_PROFILE`);
     addon.mouseSetButtonMapping(id, slotArg, BTN, LAYER, ACTION_TYPE, markerParams(slotArg));
     readAll(`after write slotArg=${slotArg} (no preamble)`);
@@ -942,7 +949,9 @@ function probeReadVariants() {
   console.log('Strategy: on each active profile, compare mouseGetDpi (standard VARSTORE read) vs');
   console.log('          mouseGetDpiProfile(slot=active) vs mouseGetDpiProfile(slot != active).');
 
-  for (const active of [1, 2, 3, 4, 5]) {
+  // Slot 2 intentionally skipped as the SET_PROFILE target per user's hardware constraint.
+  // Reads of slot 2 via mouseGetDpiProfile are non-destructive and remain enabled.
+  for (const active of [1, 3, 4, 5]) {
     addon.mouseSetActiveProfile(id, active);
     console.log(`\nActive = ${active}:`);
     console.log(`  mouseGetDpi (standard VARSTORE): ${addon.mouseGetDpi(id)}`);
@@ -1010,7 +1019,8 @@ function probeSideEffects() {
     console.log(`Starting active profile: ${wasActive}. Press ENTER to begin.`);
     await wait();
 
-    for (const target of [1, 2, 3, 4, 5]) {
+    // Slot 2 intentionally skipped per user's hardware constraint.
+    for (const target of [1, 3, 4, 5]) {
       console.log(`\nAbout to SET_PROFILE(${target}). Watch the mouse. Press ENTER.`);
       await wait();
       addon.mouseSetActiveProfile(id, target);
@@ -1075,12 +1085,13 @@ git commit -m "chore(probes): probe 5 — side-effect observation (user-run)"
 
 - [ ] **Step 1: Restore mouse to a clean state**
 
-The probes have written test DPI values and button mappings across all slots. Restore:
+The probes have written test DPI values and button mappings across slots 1, 3, 4, 5. Slot 2 was preserved per the hardware constraint and does not need restoration. Restore the other slots:
 
 ```bash
 node scripts/probes/naga-v2-pro-probe.js list  # confirm device still detected
-# Manually: open the app, select each profile, re-apply the user's desired DPI and button mappings.
+# Manually: open the app, select each of slots 1, 3, 4, 5, and re-apply the user's desired DPI and button mappings.
 # Alternatively, if the user has a Synapse config to restore from, do that.
+# SET_PROFILE(2) is safe to issue now if the user wants to return to slot 2 as the active profile.
 ```
 
 Ask the user to confirm the mouse is back to a usable state before moving on.
