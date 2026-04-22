@@ -467,8 +467,11 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
   }
 
   clearHistory() {
-    if (this.state.undoStack.length === 0 && this.state.redoStack.length === 0) return;
-    this.setState({ undoStack: [], redoStack: [] });
+    this.setState(prev =>
+      (prev.undoStack.length === 0 && prev.redoStack.length === 0)
+        ? null
+        : { undoStack: [], redoStack: [] }
+    );
   }
 
   dispatchMappingChange(changes, { fromHistory = false } = {}) {
@@ -493,7 +496,10 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
           after: { actionType: change.actionType, params: change.params },
         };
       });
-      entry = singles.length === 1 ? singles[0] : { type: 'group', entries: singles };
+      const allBeforesCaptured = singles.every(s => s.before !== null);
+      entry = allBeforesCaptured
+        ? (singles.length === 1 ? singles[0] : { type: 'group', entries: singles })
+        : null;
     }
 
     changes.forEach(change => {
@@ -506,25 +512,24 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
       });
     });
 
-    // Optimistically update local state for changes on the currently-visible layer.
-    const visibleChanges = changes.filter(c => c.layer === this.state.layer);
-    if (visibleChanges.length > 0) {
-      this.setState(prev => ({
-        mappings: prev.mappings.map(b => {
+    this.setState(prev => {
+      const next = {};
+      const visibleChanges = changes.filter(c => c.layer === prev.layer);
+      if (visibleChanges.length > 0) {
+        next.mappings = prev.mappings.map(b => {
           const hit = visibleChanges.find(c => c.buttonId === b.id);
           if (!hit) return b;
           return { ...b, mapping: { ...b.mapping, actionType: hit.actionType, params: hit.params } };
-        }),
-      }));
-    }
-
-    if (!fromHistory && entry) {
-      this.setState(prev => {
-        const next = prev.undoStack.concat(entry);
-        if (next.length > UNDO_STACK_LIMIT) next.shift();
-        return { undoStack: next, redoStack: [] };
-      });
-    }
+        });
+      }
+      if (!fromHistory && entry) {
+        const nextUndo = prev.undoStack.concat(entry);
+        if (nextUndo.length > UNDO_STACK_LIMIT) nextUndo.shift();
+        next.undoStack = nextUndo;
+        next.redoStack = [];
+      }
+      return Object.keys(next).length > 0 ? next : null;
+    });
   }
 
   handleSlotClick(slot) {
