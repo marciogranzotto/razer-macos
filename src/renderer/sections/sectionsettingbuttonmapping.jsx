@@ -605,6 +605,63 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
     }
   }
 
+  handleDragStart(e, btn) {
+    if (this.state.profileSwitching) {
+      e.preventDefault();
+      return;
+    }
+    e.dataTransfer.effectAllowed = 'move';
+    // Firefox needs dataTransfer to be set for drag to start.
+    e.dataTransfer.setData('text/plain', String(btn.id));
+    this.setState({ dragSourceId: btn.id, editingButton: null });
+  }
+
+  handleDragEnd() {
+    this.setState({ dragSourceId: null, dropTargetId: null });
+  }
+
+  handleDragOver(e, btn) {
+    const { dragSourceId } = this.state;
+    if (dragSourceId == null || dragSourceId === btn.id) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (this.state.dropTargetId !== btn.id) {
+      this.setState({ dropTargetId: btn.id });
+    }
+  }
+
+  handleDragLeave(e, btn) {
+    if (this.state.dropTargetId === btn.id) {
+      this.setState({ dropTargetId: null });
+    }
+  }
+
+  handleDrop(e, targetBtn) {
+    e.preventDefault();
+    const { dragSourceId, mappings, layer } = this.state;
+    this.setState({ dragSourceId: null, dropTargetId: null });
+    if (dragSourceId == null || dragSourceId === targetBtn.id) return;
+
+    const source = mappings.find(b => b.id === dragSourceId);
+    const target = mappings.find(b => b.id === targetBtn.id);
+    if (!source || !target || !source.mapping || !target.mapping) return;
+
+    this.dispatchMappingChange([
+      {
+        buttonId: target.id,
+        layer,
+        actionType: source.mapping.actionType,
+        params: source.mapping.params,
+      },
+      {
+        buttonId: source.id,
+        layer,
+        actionType: target.mapping.actionType,
+        params: target.mapping.params,
+      },
+    ]);
+  }
+
   handleKeyDown(event) {
     if (!event.metaKey) return; // macOS cmd only
     if (event.key !== 'z' && event.key !== 'Z') return;
@@ -944,20 +1001,37 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
       gap: '6px',
       padding: '0 10px 10px',
     }}>
-      {orderedMappings.map(btn => (
-        <div
-          key={btn.id}
-          onClick={() => this.startEditing(btn)}
-          style={gridCellStyle(editingButton === btn.id)}
-        >
-          <div style={{ color: '#47e10c', fontSize: '11px', fontWeight: 'bold' }}>
-            {btn.label}
+      {orderedMappings.map(btn => {
+        const isDragSource = this.state.dragSourceId === btn.id;
+        const isDropTarget = this.state.dropTargetId === btn.id;
+        const baseStyle = gridCellStyle(editingButton === btn.id);
+        const style = {
+          ...baseStyle,
+          opacity: isDragSource ? 0.4 : 1,
+          outline: isDropTarget ? '2px solid #47e10c' : 'none',
+          outlineOffset: isDropTarget ? '-2px' : undefined,
+        };
+        return (
+          <div
+            key={btn.id}
+            draggable={!this.state.profileSwitching}
+            onDragStart={(e) => this.handleDragStart(e, btn)}
+            onDragEnd={() => this.handleDragEnd()}
+            onDragOver={(e) => this.handleDragOver(e, btn)}
+            onDragLeave={(e) => this.handleDragLeave(e, btn)}
+            onDrop={(e) => this.handleDrop(e, btn)}
+            onClick={() => this.startEditing(btn)}
+            style={style}
+          >
+            <div style={{ color: '#47e10c', fontSize: '11px', fontWeight: 'bold' }}>
+              {btn.label}
+            </div>
+            <div style={{ color: '#999', fontSize: '9px', marginTop: '2px', textAlign: 'center' }}>
+              {describeMapping(btn.mapping)}
+            </div>
           </div>
-          <div style={{ color: '#999', fontSize: '9px', marginTop: '2px', textAlign: 'center' }}>
-            {describeMapping(btn.mapping)}
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>;
   }
 

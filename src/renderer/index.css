@@ -291,3 +291,7 @@ ol {
   background: #ff4444 !important;
   color: #fff !important;
 }
+[draggable="true"] {
+  -webkit-user-select: none;
+  user-select: none;
+}
