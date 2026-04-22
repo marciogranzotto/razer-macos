@@ -641,25 +641,25 @@ EOF
 
 **Files:** None (manual checks only)
 
-- [ ] **Step 1: Start the dev server**
+- [x] **Step 1: Start the dev server**
 
 ```bash
 source "$HOME/.nvm/nvm.sh" && nvm use 16 >/dev/null && yarn dev
 ```
 
-- [ ] **Step 2: Verify editor edits undo/redo**
+- [x] **Step 2: Verify editor edits undo/redo**
 
 With the Razer Naga V2 Pro connected, open Button Mapping. Pick Button 1, change its mapping via the editor, click Apply. Confirm the ↶ button lights up. Press `cmd+z`. Button reverts to the prior mapping both in the UI and (test physically by pressing the button) on the device. Press `cmd+shift+z`. Change re-applies.
 
-- [ ] **Step 3: Verify restore-to-default undo**
+- [x] **Step 3: Verify restore-to-default undo**
 
 Pick a button with a non-default mapping. In the editor pick "Default", click Apply. ↶ active. `cmd+z` — button returns to the previous custom mapping. `cmd+shift+z` — back to default.
 
-- [ ] **Step 4: Verify drag-swap and one-shot undo**
+- [x] **Step 4: Verify drag-swap and one-shot undo**
 
 Drag Button 7 onto Button 4. Confirm: both cells swap labels, ↶ active. `cmd+z` — both cells revert *in one press*. Physically test both buttons on the device.
 
-- [ ] **Step 5: Verify drag visual feedback**
+- [x] **Step 5: Verify drag visual feedback**
 
 During a drag: source cell fades to ~40% opacity. Dragging over a valid target: target shows a green outline. Drop outside grid: no change, visuals reset. Dragging onto the source itself: no swap, no outline.
 
@@ -667,11 +667,11 @@ During a drag: source cell fades to ~40% opacity. Dragging over a valid target: 
 
 Make 5+ edits. Press ↶ to undo two of them. Make a new edit. Confirm ↷ becomes disabled (redo cleared). Make 60+ rapid edits (hold an editor open and mash). Confirm the UI stays responsive and the oldest entries drop silently (you'll be able to undo 50 steps, not 60).
 
-- [ ] **Step 7: Verify history clears on profile switch**
+- [x] **Step 7: Verify history clears on profile switch**
 
 Make 2 edits on profile 1. Save to slot 2 — observe ↶ disables. Switch to slot 2, make an edit, switch back to slot 1 — observe ↶ disables each switch.
 
-- [ ] **Step 8: Verify cross-layer undo auto-switches**
+- [x] **Step 8: Verify cross-layer undo auto-switches**
 
 On Normal layer, edit Button 1. Toggle to Hypershift. Press `cmd+z`. UI should auto-switch to Normal and revert Button 1.
 

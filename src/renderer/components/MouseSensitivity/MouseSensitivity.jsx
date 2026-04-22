@@ -5,6 +5,10 @@ import ReactSlider from 'react-slider';
 export default function MouseSensitivity({ dpi, handleClick, configuration }) {
   const [currentDpi, setCurrentDpi] = useState(dpi);
 
+  useEffect(() => {
+    setCurrentDpi(dpi);
+  }, [dpi]);
+
   const changeSliderValue = (value) => {
     setCurrentDpi(value);
   };

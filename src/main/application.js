@@ -213,7 +213,8 @@ export class Application {
       if (!currentDevice) return;
       try {
         currentDevice.switchProfile(profile);
-        event.reply('profile-switched', { profile });
+        event.reply('profile-switched', { profile, dpi: currentDevice.dpi });
+        this.refreshTray();
       } catch (e) {
         event.reply('profile-switched', { profile, error: e.message });
       }
@@ -241,7 +242,9 @@ export class Application {
           slot,
           slotOccupied: currentDevice.slotOccupied,
           activeProfile: currentDevice.activeProfile,
+          dpi: currentDevice.dpi,
         });
+        this.refreshTray();
       } catch (e) {
         event.reply('slot-cleared', { slot, error: e.message });
       }
