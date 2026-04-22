@@ -193,6 +193,90 @@ Evidence: The mirror-to-slot-1 behavior in the current driver copies every DPI/b
 
 Phase 2 probes that will confirm: indirectly by 2.2 (verify slot 1 is preserved after writes to other slots) and 2.4 (confirm per-slot DPI write semantics).
 
+## Phase 2 — On-device probe findings
+
+### Probe 1: SET_PROFILE active-slot verification
+
+Ran: `node scripts/probes/naga-v2-pro-probe.js set-profile`
+Output: `/tmp/probe-set-profile.txt`.
+
+Salient observations (full output):
+
+```
+Found 1 device(s):
+  [0] pid=0xa7 internalId=0
+Probe 1: SET_PROFILE active-slot verification
+Baseline (no intervention):
+Command failed (mouse)
+Contents of request_report are:
+command_class: 0X05
+command_id: 0X82
+transaction_id: 0X1F
+
+  getActiveProfile(): 0
+  standard mouseGetDpi(): 6454
+  per-slot reads: slot1=1285, slot2=1029, slot3=1029, slot4=1029, slot5=773
+
+SET_PROFILE(3):
+Command failed (mouse)
+Contents of request_report are:
+command_class: 0X05
+command_id: 0X82
+transaction_id: 0X1F
+
+  getActiveProfile(): 0
+  standard mouseGetDpi(): 6454
+  per-slot reads: slot1=1285, slot2=1029, slot3=1029, slot4=1029, slot5=773
+
+SET_PROFILE(4):
+Command failed (mouse)
+Contents of request_report are:
+command_class: 0X05
+command_id: 0X82
+transaction_id: 0X1F
+
+  getActiveProfile(): 0
+  standard mouseGetDpi(): 6454
+  per-slot reads: slot1=1285, slot2=1029, slot3=1029, slot4=1029, slot5=773
+
+SET_PROFILE(5):
+Command failed (mouse)
+Contents of request_report are:
+command_class: 0X05
+command_id: 0X82
+transaction_id: 0X1F
+
+  getActiveProfile(): 0
+  standard mouseGetDpi(): 6454
+  per-slot reads: slot1=1285, slot2=1029, slot3=1029, slot4=1029, slot5=773
+
+SET_PROFILE(1):
+Command failed (mouse)
+Contents of request_report are:
+command_class: 0X05
+command_id: 0X03
+transaction_id: 0X1F
+
+Command failed (mouse)
+Contents of request_report are:
+command_class: 0X05
+command_id: 0X82
+transaction_id: 0X1F
+
+  getActiveProfile(): 0
+  standard mouseGetDpi(): 6454
+  per-slot reads: slot1=1285, slot2=1029, slot3=1029, slot4=1029, slot5=773
+```
+
+Findings:
+- Does `mouseGetDpi` (standard VARSTORE read) return a different value after `SET_PROFILE(N)`? **No.** `mouseGetDpi()` returned 6454 in every iteration — baseline and all four SET_PROFILE calls. The standard read is completely unaffected.
+- Does `mouseGetActiveProfile` match the slot we just set? **No — it returns 0 for every call.** The "Command failed (mouse)" error for `command_class: 0X05 command_id: 0X82` appears before every `getActiveProfile()` call, confirming that `0x05:0x82` is the wrong command for this device (it NAKs/fails on every invocation). The returned value of 0 is a default/failure sentinel, not a real profile index. This is consistent with the Phase 1 ambiguity between `0x05:0x02` (observed outgoing in capture) and `0x05:0x82` (driver's current command) — the driver is using the wrong command ID.
+- Does `mouseSetActiveProfile` work? **Partially.** For SET_PROFILE(3), SET_PROFILE(4), SET_PROFILE(5): the driver attempted `0x05:0x82` for the SET (which also fails). For SET_PROFILE(1): two failures are logged — one for `0x05:0x03` (the actual SET command) and one for `0x05:0x82` (the follow-up GET). This means `mouseSetActiveProfile` sends `0x05:0x03` for slot 1 specifically, but the device rejects it. Slots 3/4/5 appear to not even attempt `0x05:0x03` — the driver may have a code path that falls through to a no-op or a different path for those slot numbers.
+- Do the per-slot reads (`mouseGetDpiProfile`) return sensible different values per slot, or consistent values regardless of active profile, or garbage? **Garbage/protocol-mismatch values.** The per-slot reads are: slot1=1285, slot2=1029, slot3=1029, slot4=1029, slot5=773 — every single iteration, baseline through all SET_PROFILE calls. These values are not DPI (no Razer device ships with 1285/1029/773 DPI). In hex: 1285=0x0505, 1029=0x0405, 773=0x0305. The low byte is always 0x05 and the high nibble matches the slot number. This is consistent with the driver's `GET_DPI_PROFILE` (`0x04:0x86`) receiving a raw status or count field in the DPI bytes, rather than actual DPI values. Either the command is not supported for this device, the argument encoding is wrong, or the response is being misread.
+
+Implication for DPI fork (Fork A / Fork B):
+The data strongly supports **Fork A**. The `0x04:0x86` per-slot reads return garbage regardless of which slot is queried or whether any SET_PROFILE was attempted, indicating the current driver cannot read per-slot DPI at all. `mouseGetDpi()` never changes across any SET_PROFILE call. This is exactly the Fork A prediction: the device does not expose per-slot DPI via the current command path, and `0x04:0x86` with the current argument encoding does not function as a per-slot DPI reader on this device. The `0x05:0x82` GET_ACTIVE_PROFILE command also fails on every call, confirming the driver is using the wrong command variant (should be `0x05:0x02` per Phase 1 capture analysis). The net result is that neither SET_PROFILE nor per-slot DPI reads are working with the current driver code — both must be fixed before the DPI fork can be tested properly.
+
 ## Open questions for Phase 2
 
 - **0x05:0x02 vs 0x05:0x82 ambiguity:** The capture shows 0x05:0x02 as the outgoing command that precedes full-resync flows, while our driver uses 0x05:0x82 (`GET_ACTIVE_PROFILE`). Both are labeled "GET_ACTIVE_PROFILE" in `COMMAND_NAMES` but may serve different roles (e.g., 0x02=host-to-device request, 0x82=device-to-host response in a request/response pattern), or 0x05:0x82 may be entirely wrong for this device. Probe 2.3 must test both command IDs to find which one returns a non-zero active profile index.

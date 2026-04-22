@@ -39,9 +39,35 @@ function findNaga() {
   return naga.internalDeviceId;
 }
 
+function probeSetProfile() {
+  const id = findNaga();
+  const readAllSlots = (tag) => {
+    const readings = [1, 2, 3, 4, 5].map(s => {
+      const r = addon.mouseGetDpiProfile(id, s);
+      return `slot${s}=${r.x}`;
+    });
+    console.log(`  ${tag}: ${readings.join(', ')}`);
+  };
+
+  console.log('Probe 1: SET_PROFILE active-slot verification');
+  console.log('Baseline (no intervention):');
+  console.log('  getActiveProfile():', addon.mouseGetActiveProfile(id));
+  console.log('  standard mouseGetDpi():', addon.mouseGetDpi(id));
+  readAllSlots('per-slot reads');
+
+  // Slot 2 intentionally skipped per user's hardware constraint.
+  for (const target of [3, 4, 5, 1]) {
+    console.log(`\nSET_PROFILE(${target}):`);
+    addon.mouseSetActiveProfile(id, target);
+    console.log('  getActiveProfile():', addon.mouseGetActiveProfile(id));
+    console.log('  standard mouseGetDpi():', addon.mouseGetDpi(id));
+    readAllSlots('per-slot reads');
+  }
+}
+
 const PROBES = {
   list: () => { listDevices(); },
-  // Other probes registered by subsequent tasks
+  'set-profile': probeSetProfile,
 };
 
 function main() {
