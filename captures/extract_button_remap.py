@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from capture_utils import load_raw_packets
 
 # Classes relevant to button-mapping analysis and its context.
-# 0x02 = button-mapping (SET = 0x0d in our driver, GET = unknown cmd)
+# 0x02 = button-mapping (SET = 0x0c in our driver and Synapse, READ = 0x8c)
 # 0x05 = profile management (SET_ACTIVE = 0x03, possible SELECT_CONTEXT = 0x02)
 # 0x06 = macro commands (MACRO_CLEAR = 0x8e) — observed near profile switches
 RELEVANT_CLASSES = {0x02, 0x05, 0x06}
