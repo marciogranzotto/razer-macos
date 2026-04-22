@@ -186,6 +186,7 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
     this.handlePanelChanged = this.handlePanelChanged.bind(this);
     this.handleRecordKeyDown = this.handleRecordKeyDown.bind(this);
     this.handleRecordKeyUp = this.handleRecordKeyUp.bind(this);
+    this.handleKeyDown = this.handleKeyDown.bind(this);
   }
 
   componentDidMount() {
@@ -239,6 +240,8 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
         this.setState({ profileSwitching: false });
       }
     });
+
+    document.addEventListener('keydown', this.handleKeyDown);
   }
 
   componentWillUnmount() {
@@ -250,6 +253,7 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
     ipcRenderer.removeAllListeners('profile-switched');
     ipcRenderer.removeAllListeners('slot-saved');
     ipcRenderer.removeAllListeners('slot-cleared');
+    document.removeEventListener('keydown', this.handleKeyDown);
     if (this.unsupportedTimer) {
       clearTimeout(this.unsupportedTimer);
       this.unsupportedTimer = null;
@@ -530,6 +534,94 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
       }
       return Object.keys(next).length > 0 ? next : null;
     });
+  }
+
+  handleUndo() {
+    if (this.state.profileSwitching) return;
+    const { undoStack } = this.state;
+    if (undoStack.length === 0) return;
+    const entry = undoStack[undoStack.length - 1];
+    const singles = entry.type === 'group' ? entry.entries : [entry];
+
+    // Build reverse changes: apply each single's `before`.
+    const changes = singles
+      .filter(s => s.before) // skip singles with no captured before (shouldn't happen for user actions)
+      .map(s => ({
+        buttonId: s.buttonId,
+        layer: s.layer,
+        actionType: s.before.actionType,
+        params: s.before.params,
+      }));
+    if (changes.length === 0) return;
+
+    const targetLayer = singles[0].layer;
+    const commit = () => {
+      this.dispatchMappingChange(changes, { fromHistory: true });
+      this.setState(prev => ({
+        undoStack: prev.undoStack.slice(0, -1),
+        redoStack: prev.redoStack.concat(entry),
+      }));
+    };
+    if (targetLayer !== this.state.layer) {
+      // Clear mappings so the grid doesn't briefly show wrong-layer data.
+      this.setState({ layer: targetLayer, editingButton: null, mappings: [] }, () => {
+        this.requestMappings();
+        commit();
+      });
+    } else {
+      commit();
+    }
+  }
+
+  handleRedo() {
+    if (this.state.profileSwitching) return;
+    const { redoStack } = this.state;
+    if (redoStack.length === 0) return;
+    const entry = redoStack[redoStack.length - 1];
+    const singles = entry.type === 'group' ? entry.entries : [entry];
+
+    const changes = singles.map(s => ({
+      buttonId: s.buttonId,
+      layer: s.layer,
+      actionType: s.after.actionType,
+      params: s.after.params,
+    }));
+
+    const targetLayer = singles[0].layer;
+    const commit = () => {
+      this.dispatchMappingChange(changes, { fromHistory: true });
+      this.setState(prev => ({
+        redoStack: prev.redoStack.slice(0, -1),
+        undoStack: prev.undoStack.concat(entry),
+      }));
+    };
+    if (targetLayer !== this.state.layer) {
+      this.setState({ layer: targetLayer, editingButton: null, mappings: [] }, () => {
+        this.requestMappings();
+        commit();
+      });
+    } else {
+      commit();
+    }
+  }
+
+  handleKeyDown(event) {
+    if (!event.metaKey) return; // macOS cmd only
+    if (event.key !== 'z' && event.key !== 'Z') return;
+
+    // Don't steal the shortcut from active text inputs or during key recording.
+    if (this.state.recording) return;
+    const tag = event.target && event.target.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    if (this.buttonMappingFeature == null) return;
+    if (this.state.panelType == null) return;
+
+    event.preventDefault();
+    if (event.shiftKey) {
+      this.handleRedo();
+    } else {
+      this.handleUndo();
+    }
   }
 
   handleSlotClick(slot) {
@@ -893,7 +985,7 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
 
       {this.renderProfileSelector()}
 
-      <div style={{ display: 'flex', padding: '0 10px 10px', gap: '5px' }}>
+      <div style={{ display: 'flex', padding: '0 10px 10px', gap: '5px', alignItems: 'center' }}>
         <button
           onClick={() => this.switchLayer(0x00)}
           style={{
@@ -912,6 +1004,30 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
             color: layer === 0x01 ? 'black' : '#47e10c',
           }}
         >Hypershift</button>
+        <button
+          onClick={() => this.handleUndo()}
+          disabled={this.state.undoStack.length === 0 || this.state.profileSwitching}
+          title="Undo (⌘Z)"
+          style={{
+            fontSize: '14px', padding: '5px 10px', borderRadius: '15px',
+            border: '1px solid black', outline: 'none',
+            cursor: (this.state.undoStack.length === 0 || this.state.profileSwitching) ? 'default' : 'pointer',
+            backgroundColor: '#35363a',
+            color: this.state.undoStack.length === 0 ? '#555' : '#47e10c',
+          }}
+        >↶</button>
+        <button
+          onClick={() => this.handleRedo()}
+          disabled={this.state.redoStack.length === 0 || this.state.profileSwitching}
+          title="Redo (⇧⌘Z)"
+          style={{
+            fontSize: '14px', padding: '5px 10px', borderRadius: '15px',
+            border: '1px solid black', outline: 'none',
+            cursor: (this.state.redoStack.length === 0 || this.state.profileSwitching) ? 'default' : 'pointer',
+            backgroundColor: '#35363a',
+            color: this.state.redoStack.length === 0 ? '#555' : '#47e10c',
+          }}
+        >↷</button>
       </div>
 
       {this.renderButtonGrid(panelType, mappings, editingButton)}
