@@ -167,10 +167,22 @@ export class RazerDeviceMouse extends RazerDevice {
   setDPI(dpi, profile = null) {
     const p = profile !== null ? profile : this.activeProfile;
     this.dpi = dpi;
+    console.log(`[DPI-DIAG] setDPI(dpi=${dpi}, profile=${profile}) → p=${p}, activeProfile=${this.activeProfile}`);
     this.addon.mouseSetDpiProfile(this.internalId, p, dpi, dpi);
     // Slot 1 mirroring
     if (this.activeProfile !== 1 && p === this.activeProfile) {
+      console.log(`[DPI-DIAG]   mirror → slot 1 = ${dpi}`);
       this.addon.mouseSetDpiProfile(this.internalId, 1, dpi, dpi);
+    }
+    // Diagnostic: read back every slot to see what actually got written
+    try {
+      const readbacks = [1, 2, 3, 4, 5].map(s => {
+        const r = this.addon.mouseGetDpiProfile(this.internalId, s);
+        return `slot${s}=${r.x}`;
+      });
+      console.log(`[DPI-DIAG]   read-back after write: ${readbacks.join(', ')}`);
+    } catch (e) {
+      console.log(`[DPI-DIAG]   read-back failed: ${e.message}`);
     }
   }
 
@@ -238,6 +250,7 @@ export class RazerDeviceMouse extends RazerDevice {
 
   switchProfile(slot) {
     if (!this.panelType) return;
+    console.log(`[DPI-DIAG] switchProfile(${slot}) starting, activeProfile was ${this.activeProfile}`);
     const buttons = this.getButtonsForPanel(this.panelType);
     // Read all button mappings from target slot (both layers)
     // Write them all to slot 1 to ensure live dispatch is current
@@ -249,10 +262,22 @@ export class RazerDeviceMouse extends RazerDevice {
     });
     // Mirror DPI to slot 1
     const dpiResult = this.addon.mouseGetDpiProfile(this.internalId, slot);
+    console.log(`[DPI-DIAG]   read from slot ${slot}: x=${dpiResult.x}, y=${dpiResult.y}`);
     this.addon.mouseSetDpiProfile(this.internalId, 1, dpiResult.x, dpiResult.y);
+    console.log(`[DPI-DIAG]   wrote x=${dpiResult.x} to slot 1`);
     this.dpi = dpiResult.x;
     // Update local tracking (no SET_PROFILE sent — see spec note)
     this.activeProfile = slot;
+    // Diagnostic: read back every slot
+    try {
+      const readbacks = [1, 2, 3, 4, 5].map(s => {
+        const r = this.addon.mouseGetDpiProfile(this.internalId, s);
+        return `slot${s}=${r.x}`;
+      });
+      console.log(`[DPI-DIAG]   read-back after switch: ${readbacks.join(', ')}`);
+    } catch (e) {
+      console.log(`[DPI-DIAG]   read-back failed: ${e.message}`);
+    }
   }
 
   saveToSlot(targetSlot) {
