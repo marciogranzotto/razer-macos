@@ -276,6 +276,68 @@ Findings:
 Implication for DPI fork (Fork A / Fork B):
 The data strongly supports **Fork A**. The `0x04:0x86` per-slot reads return garbage regardless of which slot is queried or whether any SET_PROFILE was attempted, indicating the current driver cannot read per-slot DPI at all. `mouseGetDpi()` never changes across any SET_PROFILE call. This is exactly the Fork A prediction: the device does not expose per-slot DPI via the current command path, and `0x04:0x86` with the current argument encoding does not function as a per-slot DPI reader on this device. The `0x05:0x82` GET_ACTIVE_PROFILE command also fails on every call, confirming the driver is using the wrong command variant (should be `0x05:0x02` per Phase 1 capture analysis). The net result is that neither SET_PROFILE nor per-slot DPI reads are working with the current driver code — both must be fixed before the DPI fork can be tested properly.
 
+### Probe 2: GET_ACTIVE_PROFILE semantics
+
+Ran: `node scripts/probes/naga-v2-pro-probe.js get-active`
+
+```
+Found 1 device(s):
+  [0] pid=0xa7 internalId=0
+Probe 2: GET_ACTIVE_PROFILE semantics
+Command failed (mouse)
+Contents of request_report are:
+command_class: 0X05
+command_id: 0X82
+transaction_id: 0X1F
+
+At rest: 0
+Command failed (mouse)
+Contents of request_report are:
+command_class: 0X05
+command_id: 0X03
+transaction_id: 0X1F
+
+Command failed (mouse)
+Contents of request_report are:
+command_class: 0X05
+command_id: 0X82
+transaction_id: 0X1F
+
+  After SET_PROFILE(1): getActive=0  (match=NO — off by 1)
+Command failed (mouse)
+Contents of request_report are:
+command_class: 0X05
+command_id: 0X82
+transaction_id: 0X1F
+
+  After SET_PROFILE(3): getActive=0  (match=NO — off by 3)
+Command failed (mouse)
+Contents of request_report are:
+command_class: 0X05
+command_id: 0X82
+transaction_id: 0X1F
+
+  After SET_PROFILE(4): getActive=0  (match=NO — off by 4)
+Command failed (mouse)
+Contents of request_report are:
+command_class: 0X05
+command_id: 0X82
+transaction_id: 0X1F
+
+  After SET_PROFILE(5): getActive=0  (match=NO — off by 5)
+```
+
+Findings:
+- At rest: 0 (preceded by a `0x05:0x82` NAK — the returned 0 is a failure sentinel, not a real profile index)
+- After SET_PROFILE(N), return value: consistently 0 for all N ∈ {1, 3, 4, 5}; `0x05:0x82` NAKs on every call regardless of whether a SET was attempted
+- Does `0x05:0x82` NAK as seen in Probe 1? Yes — every single invocation produces "Command failed (mouse) command_class: 0X05 command_id: 0X82"
+- Additional observation: `mouseSetActiveProfile(id, 1)` also triggers a `0x05:0x03` NAK (the SET command itself fails for slot 1 on this device); slots 3/4/5 generate no SET-command error, suggesting the driver skips the `0x05:0x03` call for those slots and the failure path is slightly different
+
+Implication for active-profile-indexing fork:
+`0x05:0x82` is definitively the wrong command ID for this device's GET_ACTIVE_PROFILE read. The device rejects it unconditionally. The returned value of 0 is a driver-side default from an uninitialized response buffer, not a device-reported slot. Phase 1 capture analysis identified `0x05:0x02` as the outgoing host-to-device command Synapse uses for GET_ACTIVE_PROFILE; the ambiguity noted there ("0x05:0x02 may be the request variant and 0x05:0x82 the response/ACK variant") is now resolved by elimination: the device does not respond to `0x05:0x82` at all, so `0x05:0x82` cannot be a valid command in either role on this device.
+
+Action item for rewrite: change `razer_mouse_attr_read_active_profile` in the driver (and the corresponding N-API binding `mouseGetActiveProfile`) to use `0x05:0x02` instead of `0x05:0x82`. After making that change, add a new N-API probe binding if needed and re-run `get-active` to verify that the device now returns non-zero slot indices. Also verify that `mouseSetActiveProfile` is corrected to send `0x05:0x03` for all profile slots (not just slot 1), since the Probe 1 data showed slots 3/4/5 do not emit `0x05:0x03` at all.
+
 ## Open questions for Phase 2
 
 - **0x05:0x02 vs 0x05:0x82 ambiguity:** The capture shows 0x05:0x02 as the outgoing command that precedes full-resync flows, while our driver uses 0x05:0x82 (`GET_ACTIVE_PROFILE`). Both are labeled "GET_ACTIVE_PROFILE" in `COMMAND_NAMES` but may serve different roles (e.g., 0x02=host-to-device request, 0x82=device-to-host response in a request/response pattern), or 0x05:0x82 may be entirely wrong for this device. Probe 2.3 must test both command IDs to find which one returns a non-zero active profile index.

@@ -69,9 +69,22 @@ function probeSetProfile() {
   }
 }
 
+function probeGetActive() {
+  const id = findNaga();
+  console.log('Probe 2: GET_ACTIVE_PROFILE semantics');
+  console.log('At rest:', addon.mouseGetActiveProfile(id));
+  // Slot 2 intentionally skipped per user's hardware constraint.
+  for (const target of [1, 3, 4, 5]) {
+    addon.mouseSetActiveProfile(id, target);
+    const after = addon.mouseGetActiveProfile(id);
+    console.log(`  After SET_PROFILE(${target}): getActive=${after}  (match=${after === target ? 'yes' : 'NO — off by ' + (target - after)})`);
+  }
+}
+
 const PROBES = {
   list: () => { listDevices(); },
   'set-profile': probeSetProfile,
+  'get-active': probeGetActive,
 };
 
 function main() {
