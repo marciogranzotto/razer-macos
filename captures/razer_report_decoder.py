@@ -52,9 +52,14 @@ class RazerReport:
     @property
     def name(self) -> str:
         key = (self.command_class, self.command_id)
-        named = COMMAND_NAMES.get(key)
-        if named:
-            return named
+        if key in COMMAND_NAMES:
+            named = COMMAND_NAMES[key]
+            if named is not None:
+                return named
+            return (
+                f"OBSERVED (semantics unconfirmed) "
+                f"class=0x{self.command_class:02x} cmd=0x{self.command_id:02x}"
+            )
         return f"UNKNOWN class=0x{self.command_class:02x} cmd=0x{self.command_id:02x}"
 
     def args_hex(self, n: int = 8) -> str:
