@@ -310,7 +310,7 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
 
   switchLayer(layer) {
     this.stopRecording();
-    this.setState({ layer, editingButton: null }, () => {
+    this.setState({ layer, editingButton: null, dragSourceId: null, dropTargetId: null }, () => {
       this.requestMappings();
     });
   }
@@ -565,8 +565,8 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
     if (targetLayer !== this.state.layer) {
       // Clear mappings so the grid doesn't briefly show wrong-layer data.
       this.setState({ layer: targetLayer, editingButton: null, mappings: [] }, () => {
-        this.requestMappings();
         commit();
+        this.requestMappings();
       });
     } else {
       commit();
@@ -597,8 +597,8 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
     };
     if (targetLayer !== this.state.layer) {
       this.setState({ layer: targetLayer, editingButton: null, mappings: [] }, () => {
-        this.requestMappings();
         commit();
+        this.requestMappings();
       });
     } else {
       commit();
