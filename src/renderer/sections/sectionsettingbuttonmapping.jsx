@@ -56,6 +56,8 @@ const MODIFIER_DEFS = [
   { bit: 0x08, label: 'Cmd' },
 ];
 
+const UNDO_STACK_LIMIT = 50;
+
 function describeMapping(mapping) {
   if (!mapping) return 'Unknown';
   const { actionType, params } = mapping;
@@ -169,6 +171,10 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
       activeProfile: 1,
       slotOccupied: { 1: true, 2: false, 3: false, 4: false, 5: false },
       profileSwitching: false,
+      undoStack: [],
+      redoStack: [],
+      dragSourceId: null,
+      dropTargetId: null,
     };
 
     this.nonModifierPressed = false;
@@ -200,6 +206,7 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
 
     ipcRenderer.on('profile-switched', (event, arg) => {
       if (!arg.error) {
+        this.clearHistory();
         this.setState({ activeProfile: arg.profile, profileSwitching: false }, () => {
           this.requestMappings();
         });
@@ -210,6 +217,7 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
 
     ipcRenderer.on('slot-saved', (event, arg) => {
       if (!arg.error) {
+        this.clearHistory();
         this.setState({ slotOccupied: arg.slotOccupied, profileSwitching: false });
       } else {
         this.setState({ profileSwitching: false });
@@ -218,8 +226,8 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
 
     ipcRenderer.on('slot-cleared', (event, arg) => {
       if (!arg.error) {
-        // Capture before setState overwrites activeProfile
         const needsRefetch = (arg.slot === this.state.activeProfile);
+        if (needsRefetch) this.clearHistory();
         this.setState({
           slotOccupied: arg.slotOccupied,
           activeProfile: arg.activeProfile,
@@ -252,6 +260,7 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
     const newPanel = data.panelType || null;
     if (newPanel !== this.state.panelType) {
       this.stopRecording();
+      this.clearHistory();
       this.setState({ panelType: newPanel, mappings: [], editingButton: null }, () => {
         this.requestMappings();
       });
@@ -262,6 +271,7 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
     if (data.productId !== this.deviceSelected.productId) return;
     const newPanel = data.panelId || null;
     this.stopRecording();
+    this.clearHistory();
     this.setState({ panelType: newPanel, mappings: [], editingButton: null }, () => {
       this.requestMappings();
     });
@@ -435,27 +445,86 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
     if (editActionType === 'default') {
       const btn = mappings.find(b => b.id === buttonId);
       if (btn && btn.defaultAction) {
-        ipcRenderer.send('set-button-mapping', {
-          device: this.deviceSelected,
+        this.dispatchMappingChange([{
           buttonId,
           layer: this.state.layer,
           actionType: btn.defaultAction.type,
           params: btn.defaultAction.params,
-        });
+        }]);
       }
       this.setState({ editingButton: null });
       return;
     }
 
     const params = this.buildParams(editActionType, editActionValue, editModifier);
-    ipcRenderer.send('set-button-mapping', {
-      device: this.deviceSelected,
+    this.dispatchMappingChange([{
       buttonId,
       layer: this.state.layer,
       actionType: editActionType,
       params,
-    });
+    }]);
     this.setState({ editingButton: null });
+  }
+
+  clearHistory() {
+    if (this.state.undoStack.length === 0 && this.state.redoStack.length === 0) return;
+    this.setState({ undoStack: [], redoStack: [] });
+  }
+
+  dispatchMappingChange(changes, { fromHistory = false } = {}) {
+    // `changes` is an array of { buttonId, layer, actionType, params }.
+    // 1 item = single; 2+ items = atomic group pushed as one stack entry.
+    if (!changes || changes.length === 0) return;
+
+    let entry = null;
+    if (!fromHistory) {
+      const singles = changes.map(change => {
+        const beforeMapping = (change.layer === this.state.layer)
+          ? (this.state.mappings.find(b => b.id === change.buttonId) || {}).mapping
+          : null;
+        const before = beforeMapping
+          ? { actionType: beforeMapping.actionType, params: beforeMapping.params }
+          : null;
+        return {
+          type: 'single',
+          layer: change.layer,
+          buttonId: change.buttonId,
+          before,
+          after: { actionType: change.actionType, params: change.params },
+        };
+      });
+      entry = singles.length === 1 ? singles[0] : { type: 'group', entries: singles };
+    }
+
+    changes.forEach(change => {
+      ipcRenderer.send('set-button-mapping', {
+        device: this.deviceSelected,
+        buttonId: change.buttonId,
+        layer: change.layer,
+        actionType: change.actionType,
+        params: change.params,
+      });
+    });
+
+    // Optimistically update local state for changes on the currently-visible layer.
+    const visibleChanges = changes.filter(c => c.layer === this.state.layer);
+    if (visibleChanges.length > 0) {
+      this.setState(prev => ({
+        mappings: prev.mappings.map(b => {
+          const hit = visibleChanges.find(c => c.buttonId === b.id);
+          if (!hit) return b;
+          return { ...b, mapping: { ...b.mapping, actionType: hit.actionType, params: hit.params } };
+        }),
+      }));
+    }
+
+    if (!fromHistory && entry) {
+      this.setState(prev => {
+        const next = prev.undoStack.concat(entry);
+        if (next.length > UNDO_STACK_LIMIT) next.shift();
+        return { undoStack: next, redoStack: [] };
+      });
+    }
   }
 
   handleSlotClick(slot) {
