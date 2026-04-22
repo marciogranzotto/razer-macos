@@ -1013,7 +1013,7 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
             border: '1px solid black', outline: 'none',
             cursor: (this.state.undoStack.length === 0 || this.state.profileSwitching) ? 'default' : 'pointer',
             backgroundColor: '#35363a',
-            color: this.state.undoStack.length === 0 ? '#555' : '#47e10c',
+            color: (this.state.undoStack.length === 0 || this.state.profileSwitching) ? '#555' : '#47e10c',
           }}
         >↶</button>
         <button
@@ -1025,7 +1025,7 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
             border: '1px solid black', outline: 'none',
             cursor: (this.state.redoStack.length === 0 || this.state.profileSwitching) ? 'default' : 'pointer',
             backgroundColor: '#35363a',
-            color: this.state.redoStack.length === 0 ? '#555' : '#47e10c',
+            color: (this.state.redoStack.length === 0 || this.state.profileSwitching) ? '#555' : '#47e10c',
           }}
         >↷</button>
       </div>
