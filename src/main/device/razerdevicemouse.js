@@ -42,6 +42,9 @@ export class RazerDeviceMouse extends RazerDevice {
 
     if(this.hasFeature(FeatureIdentifier.BUTTON_MAPPING)) {
       this.panelType = this.getSidePanelType();
+      this.activeProfile = this.getActiveProfile();
+      this.slotOccupied = { 1: true, 2: false, 3: false, 4: false, 5: false };
+      this.probeSlotOccupancy();
     }
 
     return super.init();
@@ -89,7 +92,7 @@ export class RazerDeviceMouse extends RazerDevice {
   resetToState(state) {
     super.resetToState(state);
     if(this.hasFeature(FeatureIdentifier.MOUSE_DPI)) {
-      this.setDPI(state.dpi);
+      this.setDPI(state.dpi, 1);
     }
     if(this.hasFeature(FeatureIdentifier.POLL_RATE)) {
       this.setPollRate(state.pollRate);
@@ -156,12 +159,19 @@ export class RazerDeviceMouse extends RazerDevice {
     this.addon.mouseSetLogoLEDEffect(this.internalId, effect);
   }
 
-  getDPI() {
-    return this.dpi;
+  getDPI(profile = null) {
+    const p = profile !== null ? profile : this.activeProfile;
+    const result = this.addon.mouseGetDpiProfile(this.internalId, p);
+    return result.x;
   }
-  setDPI(dpi) {
+  setDPI(dpi, profile = null) {
+    const p = profile !== null ? profile : this.activeProfile;
     this.dpi = dpi;
-    this.addon.mouseSetDpi(this.internalId, dpi);
+    this.addon.mouseSetDpiProfile(this.internalId, p, dpi, dpi);
+    // Slot 1 mirroring
+    if (this.activeProfile !== 1 && p === this.activeProfile) {
+      this.addon.mouseSetDpiProfile(this.internalId, 1, dpi, dpi);
+    }
   }
 
   getBrightnessMatrix() {
@@ -216,8 +226,85 @@ export class RazerDeviceMouse extends RazerDevice {
     return this.addon.mouseGetSidePanelType(this.internalId);
   }
 
-  getButtonMapping(buttonId, layer = 0x00) {
-    const raw = this.addon.mouseGetButtonMapping(this.internalId, 0x01, buttonId, layer);
+  getActiveProfile() {
+    return this.addon.mouseGetActiveProfile(this.internalId);
+  }
+
+  setActiveProfile(slot) {
+    this.addon.mouseSetActiveProfile(this.internalId, slot);
+    this.addon.mouseMacroClear(this.internalId);
+    this.activeProfile = slot;
+  }
+
+  switchProfile(slot) {
+    if (!this.panelType) return;
+    const buttons = this.getButtonsForPanel(this.panelType);
+    // Read all button mappings from target slot (both layers)
+    // Write them all to slot 1 to ensure live dispatch is current
+    [0x00, 0x01].forEach(layer => {
+      buttons.forEach(btn => {
+        const mapping = this.getButtonMapping(btn.id, layer, slot);
+        this.addon.mouseSetButtonMapping(this.internalId, 1, btn.id, layer, mapping.actionType, mapping.params);
+      });
+    });
+    // Mirror DPI to slot 1
+    const dpiResult = this.addon.mouseGetDpiProfile(this.internalId, slot);
+    this.addon.mouseSetDpiProfile(this.internalId, 1, dpiResult.x, dpiResult.y);
+    this.dpi = dpiResult.x;
+    // Update local tracking (no SET_PROFILE sent — see spec note)
+    this.activeProfile = slot;
+  }
+
+  saveToSlot(targetSlot) {
+    if (!this.panelType) return;
+    const buttons = this.getButtonsForPanel(this.panelType);
+    // Copy all button mappings from slot 1 to target slot (both layers)
+    [0x00, 0x01].forEach(layer => {
+      buttons.forEach(btn => {
+        const mapping = this.getButtonMapping(btn.id, layer, 1);
+        this.addon.mouseSetButtonMapping(this.internalId, targetSlot, btn.id, layer, mapping.actionType, mapping.params);
+      });
+    });
+    // Copy DPI
+    const dpiResult = this.addon.mouseGetDpiProfile(this.internalId, 1);
+    this.addon.mouseSetDpiProfile(this.internalId, targetSlot, dpiResult.x, dpiResult.y);
+    this.addon.mouseMacroClear(this.internalId);
+    this.slotOccupied[targetSlot] = true;
+  }
+
+  clearSlot(slot) {
+    if (slot === 1) return; // Slot 1 cannot be cleared
+    // Send SET_PROFILE + MACRO_CLEAR as observed in capture
+    this.addon.mouseSetActiveProfile(this.internalId, slot);
+    this.addon.mouseMacroClear(this.internalId);
+    this.slotOccupied[slot] = false;
+    if (slot === this.activeProfile) {
+      this.activeProfile = 1;
+    }
+  }
+
+  probeSlotOccupancy() {
+    if (!this.panelType) return;
+    const buttons = this.getButtonsForPanel(this.panelType);
+    if (buttons.length === 0) return;
+    const testButtonId = buttons[0].id;
+    for (let slot = 2; slot <= 5; slot++) {
+      try {
+        const raw = this.addon.mouseGetButtonMapping(this.internalId, slot, testButtonId, 0x00);
+        // Check indices 3-9 (actionType + params). Indices 0-2 (profile, buttonId, layer)
+        // always echo back the request args and will be non-zero, so they can't be used
+        // to determine occupancy. This heuristic may need adjustment after empirical testing.
+        const hasData = raw.some((byte, i) => i >= 3 && byte !== 0);
+        this.slotOccupied[slot] = hasData;
+      } catch (e) {
+        this.slotOccupied[slot] = false;
+      }
+    }
+  }
+
+  getButtonMapping(buttonId, layer = 0x00, profile = null) {
+    const p = profile !== null ? profile : this.activeProfile;
+    const raw = this.addon.mouseGetButtonMapping(this.internalId, p, buttonId, layer);
     return {
       profile: raw[0],
       buttonId: raw[1],
@@ -227,9 +314,14 @@ export class RazerDeviceMouse extends RazerDevice {
     };
   }
 
-  setButtonMapping(buttonId, layer, actionType, params) {
-    this.addon.mouseSetButtonMapping(
-      this.internalId, 0x01, buttonId, layer, actionType, params);
+  setButtonMapping(buttonId, layer, actionType, params, profile = null) {
+    const p = profile !== null ? profile : this.activeProfile;
+    this.addon.mouseSetButtonMapping(this.internalId, p, buttonId, layer, actionType, params);
+    // Slot 1 mirroring: when active profile is not slot 1 and we're writing to the active profile,
+    // also write to slot 1 so the live dispatch profile stays current
+    if (this.activeProfile !== 1 && p === this.activeProfile) {
+      this.addon.mouseSetButtonMapping(this.internalId, 1, buttonId, layer, actionType, params);
+    }
   }
 
   getButtonsForPanel(panelId) {
@@ -239,11 +331,11 @@ export class RazerDeviceMouse extends RazerDevice {
     return panelConfig ? panelConfig.buttons : [];
   }
 
-  getAllButtonMappings(panelId, layer = 0x00) {
+  getAllButtonMappings(panelId, layer = 0x00, profile = null) {
     const buttons = this.getButtonsForPanel(panelId);
     return buttons.map(btn => ({
       ...btn,
-      mapping: this.getButtonMapping(btn.id, layer),
+      mapping: this.getButtonMapping(btn.id, layer, profile),
     }));
   }
 }
