@@ -1046,26 +1046,6 @@ void MouseMacroClear(const Napi::CallbackInfo &info) {
     razer_mouse_attr_write_macro_clear(device.usbDevice);
 }
 
-Napi::Value MouseGetDpiProfile(const Napi::CallbackInfo &info) {
-    Napi::Env env = info.Env();
-    RazerDevice device = getRazerDeviceFor(info);
-    unsigned char profile = info[1].ToNumber().Uint32Value();
-    unsigned short dpi_x = 0, dpi_y = 0;
-    razer_mouse_attr_read_dpi_profile(device.usbDevice, profile, &dpi_x, &dpi_y);
-    Napi::Object result = Napi::Object::New(env);
-    result.Set("x", Napi::Number::New(env, dpi_x));
-    result.Set("y", Napi::Number::New(env, dpi_y));
-    return result;
-}
-
-void MouseSetDpiProfile(const Napi::CallbackInfo &info) {
-    RazerDevice device = getRazerDeviceFor(info);
-    unsigned char profile = info[1].ToNumber().Uint32Value();
-    unsigned short dpi_x = info[2].ToNumber().Uint32Value();
-    unsigned short dpi_y = info[3].ToNumber().Uint32Value();
-    razer_mouse_attr_write_dpi_profile(device.usbDevice, profile, dpi_x, dpi_y);
-}
-
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
 
     exports.Set("kbdSetModeNone", Napi::Function::New(env, KbdSetModeNone));
@@ -1114,8 +1094,6 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
     exports.Set("mouseGetActiveProfile",  Napi::Function::New(env, MouseGetActiveProfile));
     exports.Set("mouseSetActiveProfile",  Napi::Function::New(env, MouseSetActiveProfile));
     exports.Set("mouseMacroClear",        Napi::Function::New(env, MouseMacroClear));
-    exports.Set("mouseGetDpiProfile",     Napi::Function::New(env, MouseGetDpiProfile));
-    exports.Set("mouseSetDpiProfile",     Napi::Function::New(env, MouseSetDpiProfile));
 
     exports.Set("mouseDockSetModeNone", Napi::Function::New(env, MouseDockSetModeNone));
     exports.Set("mouseDockSetModeBreathe", Napi::Function::New(env, MouseDockSetModeBreathe));
