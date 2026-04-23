@@ -160,29 +160,41 @@ export class RazerDeviceMouse extends RazerDevice {
   }
 
   getDPI(profile = null) {
-    // DPI is VARSTORE (Fork A) — always reads from the currently-active slot.
-    // If a caller wants the DPI of a specific profile, SET_PROFILE(p) must be
-    // sent first. Callers that currently pass `profile` are OK: they set it
-    // first via setDPI/switchProfile, then read back, so this.activeProfile
-    // is already correct.
+    // Live DPI (VARSTORE read) reflects the currently-active profile's active-stage DPI.
+    // If caller wants another profile's stored DPI, they must activate it first.
     if (profile !== null && profile !== this.activeProfile) {
-      this.addon.mouseSetActiveProfile(this.internalId, profile);
+      this.addon.mouseActivateProfile(this.internalId, profile);
       this.activeProfile = profile;
     }
     return this.addon.mouseGetDpi(this.internalId);
   }
   setDPI(dpi, profile = null) {
-    // DPI on Naga V2 Pro is Fork A: the device uses a single VARSTORE DPI register
-    // that is scoped to whichever profile slot is currently active. To set DPI on
-    // profile N, the hardware must be on slot N; the `profile` argument is
-    // a targeting hint from callers (e.g. resetToState passing profile=1).
+    // DPI on Naga V2 Pro is stored per-profile via SET_DPI_STAGES (0x04:0x06),
+    // NOT via VARSTORE (which is a single global register). To persist DPI on
+    // profile N, we write a 5-stage table targeting that profile with the user's
+    // DPI as the active stage. Other stages are fractions/multiples so the
+    // hardware's DPI-cycle button has usable alternatives.
     const p = profile !== null ? profile : this.activeProfile;
-    if (p !== this.activeProfile) {
-      this.addon.mouseSetActiveProfile(this.internalId, p);
-      this.activeProfile = p;
-    }
     this.dpi = dpi;
-    this.addon.mouseSetDpi(this.internalId, dpi);
+    const stages = [
+      { x: Math.max(200, Math.floor(dpi / 4)), y: Math.max(200, Math.floor(dpi / 4)) },
+      { x: Math.max(400, Math.floor(dpi / 2)), y: Math.max(400, Math.floor(dpi / 2)) },
+      { x: dpi, y: dpi },
+      { x: Math.min(30000, dpi * 2), y: Math.min(30000, dpi * 2) },
+      { x: Math.min(30000, dpi * 4), y: Math.min(30000, dpi * 4) },
+    ];
+    // Guard against all-identical stages (device rejects): if dpi is tiny or huge,
+    // the clamps could collide. Add +i bumps to guarantee uniqueness.
+    const seen = new Set();
+    for (let i = 0; i < stages.length; i++) {
+      while (seen.has(stages[i].x)) {
+        stages[i].x++;
+        stages[i].y++;
+      }
+      seen.add(stages[i].x);
+    }
+    // active_stage is 1-indexed; stage 3 is the user-chosen DPI (middle).
+    this.addon.mouseSetDpiStages(this.internalId, p, 3, stages);
   }
 
   getBrightnessMatrix() {
@@ -242,16 +254,18 @@ export class RazerDeviceMouse extends RazerDevice {
   }
 
   setActiveProfile(slot) {
-    this.addon.mouseSetActiveProfile(this.internalId, slot);
+    this.addon.mouseActivateProfile(this.internalId, slot);
     this.addon.mouseMacroClear(this.internalId);
     this.activeProfile = slot;
   }
 
   switchProfile(slot) {
     if (!this.panelType) return;
-    this.addon.mouseSetActiveProfile(this.internalId, slot);
+    // 0x05:0x04 is the real SET_ACTIVE_PROFILE in PC mode on this device.
+    // The older 0x05:0x03 (mouseSetActiveProfile) does something else.
+    this.addon.mouseActivateProfile(this.internalId, slot);
     this.activeProfile = slot;
-    // Re-read live DPI from VARSTORE so the UI reflects the new slot's value.
+    // Re-read live DPI via VARSTORE (it reflects the active profile's stages).
     this.dpi = this.addon.mouseGetDpi(this.internalId);
   }
 
@@ -260,7 +274,6 @@ export class RazerDeviceMouse extends RazerDevice {
     if (targetSlot < 1 || targetSlot > 5) return;
     const sourceSlot = this.activeProfile;
     const buttons = this.getButtonsForPanel(this.panelType);
-    // Snapshot current button mappings from the active slot (Fork B per-slot reads are honest).
     const snapshot = [];
     [0x00, 0x01].forEach(layer => {
       buttons.forEach(btn => {
@@ -268,27 +281,24 @@ export class RazerDeviceMouse extends RazerDevice {
         snapshot.push({ layer, buttonId: btn.id, actionType: mapping.actionType, params: mapping.params });
       });
     });
-    // Snapshot current DPI from VARSTORE.
-    const dpi = this.addon.mouseGetDpi(this.internalId);
-    // Switch hardware to target slot so VARSTORE DPI write lands there.
-    this.addon.mouseSetActiveProfile(this.internalId, targetSlot);
+    const currentDpi = this.dpi;
+    // Switch hardware to target slot.
+    this.addon.mouseActivateProfile(this.internalId, targetSlot);
     this.activeProfile = targetSlot;
-    // Write button mappings to target slot (Fork B — per-slot write is honest).
+    // Write button mappings to the target slot (Fork B — direct per-slot write).
     snapshot.forEach(({ layer, buttonId, actionType, params }) => {
       this.addon.mouseSetButtonMapping(this.internalId, targetSlot, buttonId, layer, actionType, params);
     });
-    // Write DPI to target slot via VARSTORE (now active).
-    this.addon.mouseSetDpi(this.internalId, dpi);
-    this.dpi = dpi;
-    // MACRO_CLEAR observed in Synapse after profile operations — preserve that convention.
+    // Write per-profile DPI stages to the target slot.
+    this.setDPI(currentDpi, targetSlot);
     this.addon.mouseMacroClear(this.internalId);
     this.slotOccupied[targetSlot] = true;
   }
 
   clearSlot(slot) {
     if (slot === 1) return; // Slot 1 cannot be cleared
-    // Send SET_PROFILE + MACRO_CLEAR as observed in capture
-    this.addon.mouseSetActiveProfile(this.internalId, slot);
+    // Send ACTIVATE_PROFILE + MACRO_CLEAR as observed in capture
+    this.addon.mouseActivateProfile(this.internalId, slot);
     this.addon.mouseMacroClear(this.internalId);
     this.slotOccupied[slot] = false;
     if (slot === this.activeProfile) {
