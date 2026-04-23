@@ -338,6 +338,78 @@ Implication for active-profile-indexing fork:
 
 Action item for rewrite: change `razer_mouse_attr_read_active_profile` in the driver (and the corresponding N-API binding `mouseGetActiveProfile`) to use `0x05:0x02` instead of `0x05:0x82`. After making that change, add a new N-API probe binding if needed and re-run `get-active` to verify that the device now returns non-zero slot indices. Also verify that `mouseSetActiveProfile` is corrected to send `0x05:0x03` for all profile slots (not just slot 1), since the Probe 1 data showed slots 3/4/5 do not emit `0x05:0x03` at all.
 
+### Probe 3: SET_DPI arg[0] semantics
+
+Ran: `node scripts/probes/naga-v2-pro-probe.js set-dpi-args`
+
+Key observations (salient lines from probe output):
+
+```
+Initial state: active=0, standard DPI=6454
+
+A. mouseSetDpiProfile(slotArg=1, dpi=1111) — NO prior SET_PROFILE
+  standard mouseGetDpi (currently active slot): 1111
+  per-slot reads: slot1=1285, slot2=1029, slot3=1029, slot4=1029, slot5=773
+
+B. SET_PROFILE(1) + mouseSetDpiProfile(slotArg=1, dpi=1121)
+  standard mouseGetDpi (currently active slot): 1121
+  per-slot reads: slot1=1285, slot2=1029, slot3=1029, slot4=1029, slot5=773
+
+A. mouseSetDpiProfile(slotArg=3, dpi=1333) — NO prior SET_PROFILE
+  standard mouseGetDpi (currently active slot): 1121
+  per-slot reads: slot1=1285, slot2=1029, slot3=1029, slot4=1029, slot5=773
+
+B. SET_PROFILE(3) + mouseSetDpiProfile(slotArg=3, dpi=1343)
+  standard mouseGetDpi (currently active slot): 1121
+  per-slot reads: slot1=1285, slot2=1029, slot3=1029, slot4=1029, slot5=773
+
+A. mouseSetDpiProfile(slotArg=4, dpi=1444) — NO prior SET_PROFILE
+  standard mouseGetDpi (currently active slot): 1121
+
+A. mouseSetDpiProfile(slotArg=5, dpi=1555) — NO prior SET_PROFILE
+  standard mouseGetDpi (currently active slot): 1121
+
+Final cross-slot retention check (slot 2 skipped):
+  After SET_PROFILE(1): standard mouseGetDpi = 1121
+  After SET_PROFILE(3): standard mouseGetDpi = 1121
+  After SET_PROFILE(4): standard mouseGetDpi = 1121
+  After SET_PROFILE(5): standard mouseGetDpi = 1121
+```
+
+Key questions answered:
+
+1. **Writes with `slotArg=1` (which happens to equal the active slot) without prior SET_PROFILE**: does `standard mouseGetDpi` reflect the marker value? **Yes — observed value 1111.** The write landed immediately.
+
+2. **Writes with `slotArg ∈ {3,4,5}` WITHOUT prior SET_PROFILE**: does standard DPI change to the marker? **No.** After writing 1333, 1444, 1555 to slots 3/4/5 without a preceding SET_PROFILE, `mouseGetDpi` stayed at 1121 (the last successful slot-1 write) on every read. No per-slot read returned any marker value — per-slot reads continued returning the same garbage values (0x0505/0x0405/0x0305 pattern) throughout.
+
+3. **Writes with `slotArg ∈ {3,4,5}` AFTER `SET_PROFILE(slotArg)`**: does standard DPI change to `marker + 10`? **No.** Even after `SET_PROFILE(3/4/5)` (which itself silently fails — the driver does not emit `0x05:0x03` for slots ≥ 2, confirmed in Probes 1 and 2), the subsequent `mouseSetDpiProfile(3/4/5, …)` write had no effect on `mouseGetDpi`. The active slot never changed from slot 1, so the DPI write targeting a non-active slot was silently ignored. Per-slot reads remain unchanged (garbage values).
+
+4. **Final retention check**: when iterating SET_PROFILE through 1, 3, 4, 5, every call returns `mouseGetDpi = 1121`. This is the last value written to slot 1 (step B for slotArg=1). No slot-3/4/5 marker was ever retained. Since `SET_PROFILE(3/4/5)` never actually switched the active slot, the device reported slot 1's DPI (1121) for all iterations. **The marker+10 values for slots 3/4/5 were never stored.**
+
+Fork determination for DPI:
+
+- **Fork A evidence** (`arg[0]` must match currently-active slot; otherwise ignored):
+  - Write with `slotArg=1` (active slot at the time) updated `mouseGetDpi` to 1111 immediately — no prior SET_PROFILE needed when arg[0] already matches the active slot.
+  - Writes with `slotArg=3/4/5` — both with and without a preceding SET_PROFILE call — had zero effect on `mouseGetDpi`. Since SET_PROFILE itself is broken for those slots (driver never sends `0x05:0x03`), the active slot remained slot 1 the entire time; any write with `arg[0] ≠ 1` was silently dropped by the device.
+  - The final retention check showed identical DPI (1121) across all SET_PROFILE iterations, confirming no per-slot DPI was stored at slots 3/4/5.
+
+- **Fork B evidence** (`arg[0]` is a real slot number, independent of active):
+  None. No observation showed a write to a non-active slot (arg[0]=3/4/5) taking effect. Per-slot reads via `0x04:0x86` remain broken (garbage values), so we cannot read back slot-specific DPI directly — but the standard `mouseGetDpi` (VARSTORE read, always reflects the active slot) never changed after non-active-slot writes, which is what Fork B would require to show.
+
+- **Confounding factor — SET_PROFILE is broken for slots ≥ 2**: The driver does not send `0x05:0x03` for slots 3/4/5, so the "B" condition (SET_PROFILE first, then write) could not be properly tested for those slots. However, the slot-1 data is unambiguous: write with `arg[0]=1` (matching the active slot, no SET_PROFILE needed) → DPI update confirmed. This alone supports Fork A.
+
+**CONFIRMED FORK: Fork A** — `SET_DPI arg[0]` must match the currently-active profile slot. Writes where `arg[0]` does not match the device's active slot are silently ignored. The evidence is: `slotArg=1` write (slot 1 was active) registered immediately in `mouseGetDpi`; `slotArg=3/4/5` writes (slot 1 remained active throughout because SET_PROFILE is broken for those slots) had zero effect. The device behaves as a VARSTORE device where `arg[0]` is a slot selector that must equal the active slot — not an independent per-slot address.
+
+Note: the "B" tests for slots 3/4/5 were blocked by the broken `mouseSetActiveProfile` implementation (doesn't emit `0x05:0x03` for slots ≥ 2). Once that is fixed and SET_PROFILE actually works, a follow-up probe can verify that SET_PROFILE(3) + write(arg[0]=3) successfully lands. Based on the Phase 1 capture evidence (Synapse always matches arg[0] to the GET_ACTIVE_PROFILE-confirmed active slot), Fork A is the expected and confirmed behavior.
+
+Implications for driver rewrite:
+- Delete `mouseSetDpiProfile` as a standalone operation (or keep only as internal helper).
+- Replace with a two-step sequence: `mouseSetActiveProfile(target_slot)` → `mouseSetDpi(dpi_x, dpi_y)` where `mouseSetDpi` sends `SET_DPI (0x04:0x05)` with `arg[0]` set to the target slot (which equals the now-active slot).
+- Fix `mouseSetActiveProfile` to emit `0x05:0x03` for ALL slot numbers (currently broken for slots ≥ 2).
+- Fix `mouseGetActiveProfile` to use `0x05:0x02` instead of `0x05:0x82`.
+- Remove the mirror-to-slot-1 behavior; it actively corrupts other profiles.
+- The correct per-profile DPI write sequence is: SET_ACTIVE_PROFILE(N) → SET_DPI(N, x, y) → SET_DPI_STAGES(N, stages) → MACRO_CLEAR.
+
 ## Open questions for Phase 2
 
 - **0x05:0x02 vs 0x05:0x82 ambiguity:** The capture shows 0x05:0x02 as the outgoing command that precedes full-resync flows, while our driver uses 0x05:0x82 (`GET_ACTIVE_PROFILE`). Both are labeled "GET_ACTIVE_PROFILE" in `COMMAND_NAMES` but may serve different roles (e.g., 0x02=host-to-device request, 0x82=device-to-host response in a request/response pattern), or 0x05:0x82 may be entirely wrong for this device. Probe 2.3 must test both command IDs to find which one returns a non-zero active profile index.

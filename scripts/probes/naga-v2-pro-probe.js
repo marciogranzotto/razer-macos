@@ -81,10 +81,47 @@ function probeGetActive() {
   }
 }
 
+function probeSetDpiArgs() {
+  const id = findNaga();
+  console.log('Probe 3: SET_DPI arg[0] semantics');
+  console.log('Strategy: for each arg[0] in {1,3,4,5} (slot 2 skipped), write a distinctive DPI value, read back via');
+  console.log('          (a) standard mouseGetDpi on currently-active slot,');
+  console.log('          (b) per-slot mouseGetDpiProfile for every slot.');
+  console.log('          Also: repeat with SET_PROFILE(arg[0]) issued before the write.');
+
+  // Start from a known active state
+  addon.mouseSetActiveProfile(id, 1);
+  console.log(`\nInitial state: active=${addon.mouseGetActiveProfile(id)}, standard DPI=${addon.mouseGetDpi(id)}`);
+
+  // Slot 2 intentionally skipped per user's hardware constraint — no writes to slot 2, no SET_PROFILE(2).
+  for (const slotArg of [1, 3, 4, 5]) {
+    const marker = 1000 + slotArg * 111;  // 1111, 1333, 1444, 1555 — distinctive
+    console.log(`\nA. mouseSetDpiProfile(slotArg=${slotArg}, dpi=${marker}) — NO prior SET_PROFILE`);
+    addon.mouseSetDpiProfile(id, slotArg, marker, marker);
+    console.log(`  standard mouseGetDpi (currently active slot): ${addon.mouseGetDpi(id)}`);
+    readAllDpiSlots(id, 'per-slot reads');
+
+    console.log(`\nB. SET_PROFILE(${slotArg}) + mouseSetDpiProfile(slotArg=${slotArg}, dpi=${marker + 10})`);
+    addon.mouseSetActiveProfile(id, slotArg);
+    const marker2 = marker + 10;
+    addon.mouseSetDpiProfile(id, slotArg, marker2, marker2);
+    console.log(`  standard mouseGetDpi (currently active slot): ${addon.mouseGetDpi(id)}`);
+    readAllDpiSlots(id, 'per-slot reads');
+  }
+
+  // Verify cross-slot retention: iterate SET_PROFILE (skipping slot 2), did the marker writes persist?
+  console.log('\nFinal cross-slot retention check (slot 2 skipped):');
+  for (const s of [1, 3, 4, 5]) {
+    addon.mouseSetActiveProfile(id, s);
+    console.log(`  After SET_PROFILE(${s}): standard mouseGetDpi = ${addon.mouseGetDpi(id)}`);
+  }
+}
+
 const PROBES = {
   list: () => { listDevices(); },
   'set-profile': probeSetProfile,
   'get-active': probeGetActive,
+  'set-dpi-args': probeSetDpiArgs,
 };
 
 function main() {
