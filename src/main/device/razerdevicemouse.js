@@ -13,11 +13,10 @@ export class RazerDeviceMouse extends RazerDevice {
     }
 
     if(this.hasFeature(FeatureIdentifier.MOUSE_DPI)) {
-      this.dpi = this.addon.mouseGetDpi(this.internalId);
-      // On Naga V2 Pro the VARSTORE DPI register is global; per-slot DPI lives
-      // in stage tables. Track the value we wrote to each slot so switchProfile
-      // updates `this.dpi` correctly from cache instead of a stale VARSTORE read.
+      // On Naga V2 Pro the VARSTORE DPI register is global and doesn't reflect
+      // per-profile stage DPI. Populated from hardware after panelType init below.
       this.slotDpi = { 1: null, 2: null, 3: null, 4: null, 5: null };
+      this.dpi = this.addon.mouseGetDpi(this.internalId);  // best-effort initial value; overwritten below
     }
 
     if(this.hasFeature(FeatureIdentifier.POLL_RATE)) {
@@ -49,6 +48,24 @@ export class RazerDeviceMouse extends RazerDevice {
       this.activeProfile = this.getActiveProfile();
       this.slotOccupied = { 1: false, 2: false, 3: false, 4: false, 5: false };
       this.probeSlotOccupancy();
+      // Read each slot's active-stage DPI from hardware into the cache so
+      // switchProfile can display the correct value immediately (before the
+      // user has written DPI via the app UI this session).
+      if (this.slotDpi) {
+        for (let slot = 1; slot <= 5; slot++) {
+          try {
+            const r = this.addon.mouseGetDpiForProfile(this.internalId, slot);
+            if (r && r.ok) this.slotDpi[slot] = r.x;
+          } catch (e) {
+            // leave null — switchProfile falls back to mouseGetDpi
+          }
+        }
+        // Also seed this.dpi from the currently-active slot's cached value, so
+        // the initial UI shows the right number before the user does anything.
+        if (this.activeProfile >= 1 && this.activeProfile <= 5 && this.slotDpi[this.activeProfile] !== null) {
+          this.dpi = this.slotDpi[this.activeProfile];
+        }
+      }
     }
 
     return super.init();
