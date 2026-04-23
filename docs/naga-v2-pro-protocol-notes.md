@@ -686,3 +686,22 @@ Remaining open questions resolvable during the rewrite rather than via additiona
 **Driver fix required:** Change `razer_mouse_attr_read_active_profile` in `librazermacos/src/lib/razermouse_driver.c` from `get_razer_report(0x05, 0x82, 0x01)` to `get_razer_report(0x05, 0x84, 0x01)`. No arg needed (arg[0]=0x00 works; `data_size=0x01` sufficient).
 
 **Phase 3 update:** The "Active profile read" fork decision in the Ready-for-Phase-3 section above is now corrected — the working command is `0x05:0x84` (not `0x05:0x02`).
+
+### Verification: post-rewrite (post-0x84-fix, final)
+
+Ran: `node scripts/probes/verify-rewrite.js` after submodule commit `91d4526` (0x82→0x84 fix) + main-repo pointer commit `2b45977` + `yarn rebuild`. Full output captured at `/tmp/verify-rewrite.txt`.
+
+Q1 — GET_ACTIVE_PROFILE after 0x82→0x84 fix: **PASS** — returns 5 (a real slot index in 1–5, no longer 0). Previously `0x05:0x82` returned 0 on every call. `0x05:0x84` returns the 1-based physical hardware profile selection.
+
+Q2 — SET_PROFILE + read round-trip: **FAIL (blocked by physical hardware profile)** — `0x05:0x84` returned 5 for all iterations. SET_PROFILE(3), SET_PROFILE(4) each received ACK (status=0x02) from the device but `mouseGetActiveProfile()` continued to return 5. SET_PROFILE(1) returned FAILURE (status=0x03). The physical profile button on the mouse was last used to select slot 5; during this session no physical button was pressed to change it. **Hypothesis:** `0x05:0x84` reads the PHYSICAL hardware profile selector (the hardware button state), not the last software-issued SET_ACTIVE_PROFILE. During the original discover probe (commit f827714), the two were in sync because the physical button happened to be on the correct slot for each test. This needs to be confirmed by the controller by pressing the physical profile button to slot 3 and re-running verify-rewrite.
+
+Q3 — Standard DPI changes with active slot: **no — DPI stays constant at 6400 across all slots (3, 4, 5, 1).** Confirmed by repeated SET(3/4/5) + immediate DPI read: DPI never changed. DPI is a single global VARSTORE register with no per-slot addressing. Per-profile DPI is NOT achievable via VARSTORE; `saveToSlot` cannot give distinct DPI per profile.
+
+Additional observation on 0x05:0x80 vs 0x05:0x84:
+- `0x05:0x80` returns 1 throughout this session regardless of SET commands (stuck at 1 since the discover probe parked on slot 1).
+- `0x05:0x84` returns 5 throughout this session regardless of SET commands (matches the physical profile button state).
+- Neither tracks software-issued SET_ACTIVE_PROFILE in the current session — both appear to track their respective physical/session state until the physical button is pressed.
+
+Implication for Task 7 (saveToSlot): **Per-profile DPI is NOT achievable via VARSTORE.** `saveToSlot` cannot give distinct DPI values per profile slot. The DPI write in `saveToSlot` will write to the single global VARSTORE register and affect all profiles equally. This is a hardware limitation, not a driver bug.
+
+**Blocked:** Q2 failed. Controller must diagnose before Tasks 4–9 can proceed. Likely fix: user presses the physical profile button to a non-5 slot, then re-runs `verify-rewrite.js`. If Q2 then passes, Tasks 4–9 can proceed.
