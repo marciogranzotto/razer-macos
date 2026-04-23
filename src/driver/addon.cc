@@ -1046,6 +1046,28 @@ void MouseMacroClear(const Napi::CallbackInfo &info) {
     razer_mouse_attr_write_macro_clear(device.usbDevice);
 }
 
+// TEMPORARY — removed after empirical GET_ACTIVE_PROFILE discovery.
+// Usage from JS: const resp = addon.mouseProbeRaw(internalId, cmdClass, cmdId, dataSize, Uint8Array argsBuf);
+// Returns: Uint8Array of full 90-byte response (status at [0], args at [8..87]).
+Napi::Value MouseProbeRaw(const Napi::CallbackInfo &info) {
+    Napi::Env env = info.Env();
+    RazerDevice device = getRazerDeviceFor(info);
+    unsigned char cmd_class = info[1].ToNumber().Uint32Value();
+    unsigned char cmd_id    = info[2].ToNumber().Uint32Value();
+    unsigned char data_size = info[3].ToNumber().Uint32Value();
+    Napi::Uint8Array args_arr = info[4].As<Napi::Uint8Array>();
+    unsigned char args_copy[80] = {0};
+    unsigned int args_len = args_arr.ElementLength() < 80 ? args_arr.ElementLength() : 80;
+    for (unsigned int i = 0; i < args_len; i++) args_copy[i] = args_arr[i];
+
+    struct razer_report resp = razer_mouse_attr_probe_raw(device.usbDevice, cmd_class, cmd_id, data_size, args_copy, args_len);
+
+    Napi::Uint8Array out = Napi::Uint8Array::New(env, 90);
+    unsigned char *p = (unsigned char *)&resp;
+    for (int i = 0; i < 90; i++) out[i] = p[i];
+    return out;
+}
+
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
 
     exports.Set("kbdSetModeNone", Napi::Function::New(env, KbdSetModeNone));
@@ -1094,6 +1116,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
     exports.Set("mouseGetActiveProfile",  Napi::Function::New(env, MouseGetActiveProfile));
     exports.Set("mouseSetActiveProfile",  Napi::Function::New(env, MouseSetActiveProfile));
     exports.Set("mouseMacroClear",        Napi::Function::New(env, MouseMacroClear));
+    exports.Set("mouseProbeRaw",          Napi::Function::New(env, MouseProbeRaw));
 
     exports.Set("mouseDockSetModeNone", Napi::Function::New(env, MouseDockSetModeNone));
     exports.Set("mouseDockSetModeBreathe", Napi::Function::New(env, MouseDockSetModeBreathe));
