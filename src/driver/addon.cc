@@ -1046,6 +1046,28 @@ void MouseMacroClear(const Napi::CallbackInfo &info) {
     razer_mouse_attr_write_macro_clear(device.usbDevice);
 }
 
+void MouseActivateProfile(const Napi::CallbackInfo &info) {
+    RazerDevice device = getRazerDeviceFor(info);
+    unsigned char profile = info[1].ToNumber().Uint32Value();
+    razer_mouse_attr_activate_profile(device.usbDevice, profile);
+}
+
+void MouseSetDpiStages(const Napi::CallbackInfo &info) {
+    RazerDevice device = getRazerDeviceFor(info);
+    unsigned char profile = info[1].ToNumber().Uint32Value();
+    unsigned char active_stage = info[2].ToNumber().Uint32Value();
+    Napi::Array stages = info[3].As<Napi::Array>();
+    unsigned char num_stages = stages.Length() > 16 ? 16 : stages.Length();
+    unsigned short dpi_x[16] = {0};
+    unsigned short dpi_y[16] = {0};
+    for (unsigned char i = 0; i < num_stages; i++) {
+        Napi::Object stage = stages.Get(i).As<Napi::Object>();
+        dpi_x[i] = stage.Get("x").As<Napi::Number>().Uint32Value();
+        dpi_y[i] = stage.Get("y").As<Napi::Number>().Uint32Value();
+    }
+    razer_mouse_attr_write_dpi_stages(device.usbDevice, profile, active_stage, num_stages, dpi_x, dpi_y);
+}
+
 // TEMPORARY — removed after empirical GET_ACTIVE_PROFILE discovery.
 // Usage from JS: const resp = addon.mouseProbeRaw(internalId, cmdClass, cmdId, dataSize, Uint8Array argsBuf);
 // Returns: Uint8Array of full 90-byte response (status at [0], args at [8..87]).
@@ -1117,6 +1139,8 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
     exports.Set("mouseSetActiveProfile",  Napi::Function::New(env, MouseSetActiveProfile));
     exports.Set("mouseMacroClear",        Napi::Function::New(env, MouseMacroClear));
     exports.Set("mouseProbeRaw",          Napi::Function::New(env, MouseProbeRaw));
+    exports.Set("mouseActivateProfile",   Napi::Function::New(env, MouseActivateProfile));
+    exports.Set("mouseSetDpiStages",      Napi::Function::New(env, MouseSetDpiStages));
 
     exports.Set("mouseDockSetModeNone", Napi::Function::New(env, MouseDockSetModeNone));
     exports.Set("mouseDockSetModeBreathe", Napi::Function::New(env, MouseDockSetModeBreathe));
