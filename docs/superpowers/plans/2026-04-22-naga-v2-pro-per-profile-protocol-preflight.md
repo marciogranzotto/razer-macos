@@ -17,6 +17,11 @@
 
 **Hardware constraint (user-set):** Slot 2 must NOT be written to or left as the active slot during probes. Probes may READ slot 2 (non-destructive) to establish baseline state, but any iteration that issues `SET_PROFILE` or writes DPI / button mappings must skip slot 2. Slots 1, 3, 4, 5 are available for testing. Every probe in Phase 2 is written with this constraint applied.
 
+**Hardware constraint (user-set, added 2026-04-22 during Phase 2):** Mouse must stay usable throughout probing.
+- DPI writes must use reasonable values (around 6400); no writing values like 1111/1333 that leave the pointer crawling.
+- Button-mapping probes must NOT write to the primary click buttons. Button id `0x01` is the primary/left click on the main mouse body; ids `0x40–0x4b` (12-button side panel), `0x50–0x55` (6-button side panel), `0x04`, `0x05` (2-button side panel) are the side-panel buttons and are the only safe targets.
+- Any probe that mutates DPI or button mappings must end with a restore step (set DPI to 6400 on active slot; restore touched button ids to their default left-click mapping).
+
 ---
 
 ## Phase 1 — Capture Analysis
