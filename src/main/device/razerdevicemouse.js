@@ -160,9 +160,16 @@ export class RazerDeviceMouse extends RazerDevice {
   }
 
   getDPI(profile = null) {
-    const p = profile !== null ? profile : this.activeProfile;
-    const result = this.addon.mouseGetDpiProfile(this.internalId, p);
-    return result.x;
+    // DPI is VARSTORE (Fork A) — always reads from the currently-active slot.
+    // If a caller wants the DPI of a specific profile, SET_PROFILE(p) must be
+    // sent first. Callers that currently pass `profile` are OK: they set it
+    // first via setDPI/switchProfile, then read back, so this.activeProfile
+    // is already correct.
+    if (profile !== null && profile !== this.activeProfile) {
+      this.addon.mouseSetActiveProfile(this.internalId, profile);
+      this.activeProfile = profile;
+    }
+    return this.addon.mouseGetDpi(this.internalId);
   }
   setDPI(dpi, profile = null) {
     // DPI on Naga V2 Pro is Fork A: the device uses a single VARSTORE DPI register
