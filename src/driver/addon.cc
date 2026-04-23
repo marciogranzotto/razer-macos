@@ -1068,6 +1068,19 @@ void MouseSetDpiStages(const Napi::CallbackInfo &info) {
     razer_mouse_attr_write_dpi_stages(device.usbDevice, profile, active_stage, num_stages, dpi_x, dpi_y);
 }
 
+Napi::Value MouseGetDpiForProfile(const Napi::CallbackInfo &info) {
+    Napi::Env env = info.Env();
+    RazerDevice device = getRazerDeviceFor(info);
+    unsigned char profile = info[1].ToNumber().Uint32Value();
+    unsigned short dpi_x = 0, dpi_y = 0;
+    int ok = razer_mouse_attr_read_dpi_stages_active(device.usbDevice, profile, &dpi_x, &dpi_y);
+    Napi::Object result = Napi::Object::New(env);
+    result.Set("x", Napi::Number::New(env, dpi_x));
+    result.Set("y", Napi::Number::New(env, dpi_y));
+    result.Set("ok", Napi::Boolean::New(env, ok == 1));
+    return result;
+}
+
 // TEMPORARY — removed after empirical GET_ACTIVE_PROFILE discovery.
 // Usage from JS: const resp = addon.mouseProbeRaw(internalId, cmdClass, cmdId, dataSize, Uint8Array argsBuf);
 // Returns: Uint8Array of full 90-byte response (status at [0], args at [8..87]).
@@ -1141,6 +1154,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
     exports.Set("mouseProbeRaw",          Napi::Function::New(env, MouseProbeRaw));
     exports.Set("mouseActivateProfile",   Napi::Function::New(env, MouseActivateProfile));
     exports.Set("mouseSetDpiStages",      Napi::Function::New(env, MouseSetDpiStages));
+    exports.Set("mouseGetDpiForProfile",  Napi::Function::New(env, MouseGetDpiForProfile));
 
     exports.Set("mouseDockSetModeNone", Napi::Function::New(env, MouseDockSetModeNone));
     exports.Set("mouseDockSetModeBreathe", Napi::Function::New(env, MouseDockSetModeBreathe));
