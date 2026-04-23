@@ -328,13 +328,11 @@ export class RazerDeviceMouse extends RazerDevice {
   }
 
   setButtonMapping(buttonId, layer, actionType, params, profile = null) {
+    // Button mapping on Naga V2 Pro is Fork B: mouseSetButtonMapping(arg[0]=slot)
+    // writes directly to the target slot independent of the currently-active
+    // profile. No mirror-to-slot-1 needed.
     const p = profile !== null ? profile : this.activeProfile;
     this.addon.mouseSetButtonMapping(this.internalId, p, buttonId, layer, actionType, params);
-    // Slot 1 mirroring: when active profile is not slot 1 and we're writing to the active profile,
-    // also write to slot 1 so the live dispatch profile stays current
-    if (this.activeProfile !== 1 && p === this.activeProfile) {
-      this.addon.mouseSetButtonMapping(this.internalId, 1, buttonId, layer, actionType, params);
-    }
   }
 
   getButtonsForPanel(panelId) {
