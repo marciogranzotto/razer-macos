@@ -172,6 +172,41 @@ function probeSetBtnArgs() {
   }
 }
 
+function probeSideEffects() {
+  const id = findNaga();
+  console.log('Probe 5: side-effect observation');
+  console.log('INSTRUCTIONS: watch the mouse LEDs and profile indicator during this probe.');
+  console.log('Note any visible changes (LED blink, color change, lighting reset, indicator number change).');
+  console.log('After each action, press ENTER to continue.\n');
+
+  const wait = () => new Promise(r => process.stdin.once('data', () => r()));
+
+  (async () => {
+    const wasActive = addon.mouseGetActiveProfile(id);
+    console.log(`Starting active profile (from getActive, likely garbage due to 0x05:0x82 NAK): ${wasActive}. Press ENTER to begin.`);
+    await wait();
+
+    // Slot 2 intentionally skipped per user's hardware constraint.
+    for (const target of [3, 4, 5, 1]) {
+      console.log(`\nAbout to SET_PROFILE(${target}). Watch the mouse. Press ENTER.`);
+      await wait();
+      addon.mouseSetActiveProfile(id, target);
+      console.log(`  Sent. Observed side effects? Type notes, press ENTER.`);
+      await wait();
+    }
+
+    console.log('\nAbout to send mouseMacroClear. Watch the mouse. Press ENTER.');
+    await wait();
+    addon.mouseMacroClear(id);
+    console.log('  Sent. Observed? Press ENTER.');
+    await wait();
+
+    console.log('\nProbe complete. Parking on slot 1 (home base).');
+    addon.mouseSetActiveProfile(id, 1);
+    process.exit(0);
+  })();
+}
+
 const PROBES = {
   list: () => { listDevices(); },
   'set-profile': probeSetProfile,
@@ -179,6 +214,7 @@ const PROBES = {
   'set-dpi-args': probeSetDpiArgs,
   'set-btn-args': probeSetBtnArgs,
   'read-variants': probeReadVariants,
+  'side-effects': probeSideEffects,
 };
 
 function main() {
