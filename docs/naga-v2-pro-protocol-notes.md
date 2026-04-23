@@ -662,3 +662,27 @@ Remaining open questions resolvable during the rewrite rather than via additiona
 1. After the `0x05:0x02` fix, does `mouseGetActiveProfile` report the hardware-active slot correctly after `mouseSetActiveProfile(N)`? (Verify with Probe 2 re-run post-fix.)
 2. After fixing `mouseSetActiveProfile` to emit `0x05:0x03` for all slots, does SET_PROFILE on the currently-active slot NAK harmlessly, or does it cause a side effect? (Was skipped as a dedicated probe — will be observed during app integration testing.)
 3. When SET_ACTIVE_PROFILE works for non-current slots, does the standard VARSTORE DPI read then return the new slot's DPI? (Probe 3 could not test this cleanly due to the broken SET_PROFILE — this must be verified during Phase 3 implementation.)
+
+---
+
+### Empirical GET_ACTIVE_PROFILE discovery (post-rewrite)
+
+**Probe:** `scripts/probes/discover-get-active-profile.js` — exhaustive sweep of all 256 command IDs in class `0x05`, with `arg[0] ∈ {0x00, current_slot}`, across four profile states (slots 1, 3, 4, 5; slot 2 skipped per hardware constraint). For each state, only non-FAIL (status ≠ 0x05, ≠ 0x04) responses were retained. Responses that differed across all four slot states were identified as candidates.
+
+**Raw candidates found:**
+
+- `0x05:0x80` (arg[0]=0x00): responds with `status=0x02`, arg[0] = **slot_index − 1** (i.e., 0-indexed slot number: returns 0x00 for slot 1, 0x01 for slot 3... wait — actual values: 0x01, 0x02, 0x03, 0x04 for slots 1, 3, 4, 5 respectively). The pattern is: `arg[0] = last_written_slot_ordinal`. This is NOT a clean 1:1 mirror of the profile number — for slot 1 it returns 0x01, slot 3 → 0x02, slot 4 → 0x03, slot 5 → 0x04. **This appears to be a "profile-switch history counter" or ordinal sequence**, not a direct slot-index echo.
+
+- `0x05:0x81` (arg[0]=0x00): accumulates prior slots in the response — after visiting slots 1, 3, 4, 5, response is `05 01 03 04 05`. This appears to be a **history/log of recent active-profile changes** (last-N profile switches). Useful for diagnostics but not a clean GET.
+
+- `0x05:0x84` (arg[0]=0x00): **STRONG CANDIDATE** — `status=0x02`, `arg[0]` exactly tracks the active slot number with a 1:1 mapping:
+  - slot=1 → arg[0]=0x01
+  - slot=3 → arg[0]=0x03
+  - slot=4 → arg[0]=0x04
+  - slot=5 → arg[0]=0x05
+
+**Conclusion: GET_ACTIVE_PROFILE is `0x05:0x84`**, not `0x05:0x82` (original driver guess) nor `0x05:0x02` (Synapse observation). The response byte at position 0 of the arguments section (offset 8 in the raw 90-byte report) contains the 1-based active profile slot number, exactly matching the argument passed to SET_ACTIVE_PROFILE (`0x05:0x03`).
+
+**Driver fix required:** Change `razer_mouse_attr_read_active_profile` in `librazermacos/src/lib/razermouse_driver.c` from `get_razer_report(0x05, 0x82, 0x01)` to `get_razer_report(0x05, 0x84, 0x01)`. No arg needed (arg[0]=0x00 works; `data_size=0x01` sufficient).
+
+**Phase 3 update:** The "Active profile read" fork decision in the Ready-for-Phase-3 section above is now corrected — the working command is `0x05:0x84` (not `0x05:0x02`).
