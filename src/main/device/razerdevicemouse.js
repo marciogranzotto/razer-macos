@@ -165,25 +165,17 @@ export class RazerDeviceMouse extends RazerDevice {
     return result.x;
   }
   setDPI(dpi, profile = null) {
+    // DPI on Naga V2 Pro is Fork A: the device uses a single VARSTORE DPI register
+    // that is scoped to whichever profile slot is currently active. To set DPI on
+    // profile N, the hardware must be on slot N; the `profile` argument is
+    // a targeting hint from callers (e.g. resetToState passing profile=1).
     const p = profile !== null ? profile : this.activeProfile;
+    if (p !== this.activeProfile) {
+      this.addon.mouseSetActiveProfile(this.internalId, p);
+      this.activeProfile = p;
+    }
     this.dpi = dpi;
-    console.log(`[DPI-DIAG] setDPI(dpi=${dpi}, profile=${profile}) → p=${p}, activeProfile=${this.activeProfile}`);
-    this.addon.mouseSetDpiProfile(this.internalId, p, dpi, dpi);
-    // Slot 1 mirroring
-    if (this.activeProfile !== 1 && p === this.activeProfile) {
-      console.log(`[DPI-DIAG]   mirror → slot 1 = ${dpi}`);
-      this.addon.mouseSetDpiProfile(this.internalId, 1, dpi, dpi);
-    }
-    // Diagnostic: read back every slot to see what actually got written
-    try {
-      const readbacks = [1, 2, 3, 4, 5].map(s => {
-        const r = this.addon.mouseGetDpiProfile(this.internalId, s);
-        return `slot${s}=${r.x}`;
-      });
-      console.log(`[DPI-DIAG]   read-back after write: ${readbacks.join(', ')}`);
-    } catch (e) {
-      console.log(`[DPI-DIAG]   read-back failed: ${e.message}`);
-    }
+    this.addon.mouseSetDpi(this.internalId, dpi);
   }
 
   getBrightnessMatrix() {
