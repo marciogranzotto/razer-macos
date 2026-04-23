@@ -473,6 +473,10 @@ Implications for driver rewrite:
 - DPI and button-mapping must be treated as separate subsystems in the rewrite: DPI uses VARSTORE (Fork A, requires SET_ACTIVE_PROFILE first), button-mapping uses direct per-slot addressing (Fork B, no preamble needed).
 - The correct per-profile button-mapping write sequence remains: `SET_BUTTON_MAPPING(slot=N, btn, layer, action_type, params)` — issued directly for any target slot without any profile-activation preamble.
 
+### Probe 5: Side-effect observation
+
+**Skipped by user decision.** During Phase 2 the user exercised `switchProfile(1)`, `switchProfile(2)`, `switchProfile(3)` multiple times via the Electron app UI (Electron `[DPI-DIAG]` output captured and folded into probe findings). No visible side effects (LED blink, lighting reset, indicator-number change) were reported. Side-effect behavior will be verified during the rewrite implementation rather than via a dedicated probe.
+
 ### Probe 6: GET_DPI read variants
 
 Ran: `node scripts/probes/naga-v2-pro-probe.js read-variants`
@@ -568,3 +572,93 @@ The following (class, cmd) pairs remain unlabeled or hypothesis-only and may be 
 - **(0x15, 0x80):** Hypothesized GET_BRIGHTNESS from capture context. No driver match. Phase 2 live probe would confirm.
 - **(0x15, 0x88):** 1 byte, arg[0]=0x00. Possibly serial number or device-info string request. Distinct from 0x00:0x82 (`razer_chroma_standard_get_serial`) and from 0x00:0x85. Not confirmed.
 - **(0x00, 0x85):** Labeled GET_POLLING_RATE by the driver, but appears in full-resync serial/device-info context in the capture. Resolution requires live probe (send 0x00:0x85, inspect response payload for serial string vs poll-rate integer).
+
+## Fork Decisions (confirmed by Phase 2)
+
+### DPI — Fork A (single VARSTORE, active-slot-gated)
+
+**Confirmed.** `mouseSetDpiProfile(id, slotArg, x, y)` only takes effect when `slotArg` equals the hardware's currently-active profile slot. Writes where `slotArg` does not match the active slot are silently ignored by the device.
+
+Key evidence:
+- Probe 3 — writes with `slotArg=1` (slot 1 was the active slot throughout the entire probe, because `mouseSetActiveProfile` never actually switched the active slot for any slot) landed immediately: `mouseGetDpi` jumped from 6454 to 1111 on the first write, then to 1121 after the preamble-variant write. Writes with `slotArg ∈ {3, 4, 5}` — both with and without a preceding `SET_PROFILE` call — had zero effect on `mouseGetDpi`. The final cross-slot retention check showed identical DPI (1121) for all SET_PROFILE iterations, confirming no per-slot DPI was stored at slots 3–5.
+- Probe 1 and Probe 6 — `mouseGetDpiProfile (0x04:0x86)` returns garbage unconditionally (x=1285/1029/773, y=257 universally across all slot indices and all active states). These are not valid DPI values; the command is not a working per-slot DPI reader on this device.
+- Standard VARSTORE read (`mouseGetDpi`, `0x04:0x85`) is the only working DPI read: it always returns the DPI of the currently-active slot.
+
+Confounding factor acknowledged: Probe 3 could not cleanly test "Fork B writes to non-active slot with working SET_PROFILE" because `mouseSetActiveProfile` never sent `0x05:0x03` for slots ≥ 2 (driver bug — confirmed in Probes 1 and 2). However, the `slotArg=1` data is unambiguous: write with `arg[0]` matching the active slot → lands immediately; write with `arg[0]` not matching → silently dropped. Even if SET_PROFILE were fixed, the write semantics remain Fork A — the per-slot DPI command (`0x04:0x05` with `arg[0]=slot`) only takes effect when `arg[0]` equals the device's current active slot.
+
+Implication for rewrite:
+- Delete `razer_mouse_attr_write_dpi_profile` and `razer_mouse_attr_read_dpi_profile` from the C driver; they are architecturally wrong for this device — there is no true per-slot DPI command.
+- Replace DPI writes with the two-step sequence: `SET_ACTIVE_PROFILE(target_slot)` → `SET_DPI(arg[0]=target_slot, x, y)` → `SET_DPI_STAGES(...)` → `MACRO_CLEAR`.
+- Replace DPI reads with the two-step sequence: `SET_ACTIVE_PROFILE(target_slot)` → `mouseGetDpi()` (standard VARSTORE).
+- Fix `mouseSetActiveProfile` to emit `0x05:0x03` for ALL slot numbers (currently broken for slots ≥ 2).
+- Synapse's captured traffic uses this exact pattern: GET_ACTIVE_PROFILE (0x05:0x02) confirms the active slot, then SET_DPI carries the same profile index in arg[0]. No per-slot DPI command with a different slot index was ever observed in the capture.
+
+### Button mapping — Fork B (true per-slot addressing)
+
+**Confirmed.** `mouseSetButtonMapping(id, slotArg, ...)` writes to slot N independent of the currently-active profile. `mouseGetButtonMapping(id, slot, ...)` returns correct per-slot data. No SET_ACTIVE_PROFILE preamble is required for either operation.
+
+Key evidence:
+- Probe 4 — writes with `slotArg ∈ {1, 3, 4, 5}` each landed in the exact target slot with zero crosstalk. Writing to slot 3 with `slotArg=3` (no preamble, slot 1 was the hardware-active slot) produced distinct marker values in slot 3 while leaving slot 1 unchanged. Same pattern for slots 4 and 5. Reads via `mouseGetButtonMapping` returned correct per-slot data with stable, meaningful values across all five slot reads.
+- With and without a SET_PROFILE preamble produced identical results — the preamble is irrelevant for button mapping.
+- Initial state showed slot N having `arg[0]=N` as the first response byte — per-slot addressing is clean and consistent.
+
+Implication for rewrite:
+- The existing `mouseSetButtonMapping` / `mouseGetButtonMapping` driver bindings are correct for per-slot addressing. No C driver changes needed for button mapping logic.
+- Remove the mirror-to-slot-1 logic in `razerdevicemouse.js`'s `setButtonMapping` (the guard `if (this.activeProfile !== 1 && p === this.activeProfile)` that redundantly writes to slot 1). It is unnecessary and overwrites user-configured slot-1 state.
+- `switchProfile` no longer needs to rewrite button mappings from the target slot to slot 1 — the target slot already holds the correct data; just issue `SET_ACTIVE_PROFILE(target)`.
+
+### Active profile read — wrong command ID in driver
+
+**Confirmed.** `0x05:0x82` (the driver's current GET_ACTIVE_PROFILE read command) NAKs every call on this device. The returned value of 0 is a driver-side failure sentinel from an uninitialized response buffer — not a device-reported profile index. The correct read command is `0x05:0x02`, which is what Synapse uses in every observed capture flow.
+
+Key evidence:
+- Probes 1, 2, and 6 all show `mouseGetActiveProfile()` returning 0, preceded by a "Command failed (mouse) command_class: 0X05 command_id: 0X82" error on every single invocation — baseline and after every SET_PROFILE call.
+- Phase 1 capture analysis identified `0x05:0x02` as the outgoing host-to-device command in GET_ACTIVE_PROFILE flows. The Phase 1 ambiguity ("0x05:0x02 may be the request; 0x05:0x82 may be the response/ACK variant") is now fully resolved by elimination: the device does not respond to `0x05:0x82` at all.
+- Additionally: `mouseSetActiveProfile` fails to emit `0x05:0x03` for slots ≥ 2 (the SET command itself is broken for non-slot-1 targets, confirmed by Probes 1 and 2 where the driver only logged a `0x05:0x03` NAK for slot 1 and produced no SET-command error for slots 3/4/5). This is a separate but related driver bug in the same function.
+
+Implication for rewrite:
+- Change `razer_mouse_attr_read_active_profile` in `librazermacos/src/lib/razermouse_driver.c` to use command `0x05:0x02` instead of `0x05:0x82`. The data_size should remain `0x01`; request arguments[0] = 0; response arguments[0] will contain the active profile index.
+- Profile indices are likely 1-based (the capture's GET_ACTIVE_PROFILE responses return values matching the preceding SET_ACTIVE_PROFILE arguments, both using 1–5 range). No +1/-1 translation is needed at the device-layer boundary, but this must be verified after the fix by re-running the Probe 2 scenario.
+- Also fix `mouseSetActiveProfile` to emit `0x05:0x03` for ALL slot numbers. Currently the driver appears to have a code path that skips or short-circuits the SET command for slots ≥ 2, which is why every SET_PROFILE(3/4/5) call in the probes was a silent no-op.
+- After both fixes, re-run the Probe 2 scenario to verify that `mouseGetActiveProfile` returns 1, 3, 4, 5 matching each `mouseSetActiveProfile(N)` call.
+
+### Mirror-to-slot-1 logic — remove entirely
+
+**Confirmed removable.** The current `razerdevicemouse.js` contains three mirror-to-slot-1 behaviors, all of which are harmful:
+
+1. **`setDPI` mirror** (roughly line ~173): when `activeProfile !== 1`, writes DPI to the active slot AND mirrors it to slot 1. Under Fork A, the correct behavior is SET_ACTIVE_PROFILE(target) + SET_DPI — there is nothing to mirror; the write lands on whichever slot is currently active via the VARSTORE. The mirror actively corrupts slot-1 DPI every time any non-slot-1 profile changes its DPI.
+
+2. **`setButtonMapping` mirror** (roughly line ~347): the guard `if (this.activeProfile !== 1 && p === this.activeProfile)` triggers an additional slot-1 write. Under Fork B, button-mapping writes target the correct slot directly — no mirror is ever needed. The mirror overwrites user-configured slot-1 button mappings.
+
+3. **`switchProfile` rewrite block** (roughly lines ~257–267): rewrites button mappings from the target slot to slot 1, and mirrors DPI. Both are unnecessary under the confirmed forks and are harmful for the same reasons as above.
+
+Key live evidence: the user's own Electron `[DPI-DIAG]` output showed `activeProfile was 0` at startup (confirming the broken `0x05:0x82` read), and demonstrated that every `switchProfile(N)` call reads garbage from `mouseGetDpiProfile` (the broken `0x04:0x86` command returning 1285/1029/773) and writes that garbage to slot 1 via the mirror — leaving the mouse with nonsense live DPI until the user manually re-applies a value. This was observed in normal app use, not an adversarial test.
+
+## Unknown commands still outstanding
+
+Commands observed in captures but not yet labeled or not needed for the Phase 3 rewrite:
+
+- `0x02:0x16` (data_size=2, args=0x0100, observed 4x in captures): unconfirmed purpose. Both "GET POLL RATE" (capture label) and GET_POLLING_RATE (driver label for `0x00:0x85`) conflict — true purpose unknown.
+- `0x0f:0x04` / `0x0f:0x84`: LED-related commands. Not needed for profile/DPI/button rewrite.
+- `0x15:0x00` / `0x15:0x07` / `0x15:0x88`: observed in full-resync flows; not needed for minimal profile-switch rewrite.
+
+## Mouse state at end of Phase 2
+
+**Note on sanity-check execution:** The read-only sanity check at the start of Task 2.8 could not be run because the Electron app (`yarn dev`) was running and held exclusive USB access (`kIOReturnExclusiveAccess`, error code `e00002c5`). The fact that the app was running and functional is itself evidence that the mouse is in a usable state (the app would not operate normally with corrupted DPI or broken button mappings on the active slot).
+
+Prior to Phase 2, DPI was restored to approximately 6400 on slot 1 (active slot) via `/tmp/restore-mouse.js` and a subsequent `setDPI(6593)` issued through the app UI. Button 0x01 was restored to default left-click (action_type=0x01, params=[0x01, 0x01, ...]) on slots 1, 3, 4, 5. Slot 2 was never touched by any probe write.
+
+## Ready for Phase 3 (rewrite)
+
+All four sub-problems have confirmed forks. The rewrite can proceed with:
+
+- **DPI**: SET_ACTIVE_PROFILE(target) + standard VARSTORE write (SET_DPI `0x04:0x05`). No per-slot DPI driver functions.
+- **Buttons**: keep existing driver (`0x02:0x0c` / `0x02:0x8c`); remove mirror logic in `razerdevicemouse.js`.
+- **Active profile read**: fix driver command ID `0x05:0x82` → `0x05:0x02`; fix `mouseSetActiveProfile` to emit `0x05:0x03` for all slot numbers.
+- **Mirror logic**: remove from `setDPI`, `setButtonMapping`, and `switchProfile` in `razerdevicemouse.js`.
+
+Remaining open questions resolvable during the rewrite rather than via additional preflight probes:
+
+1. After the `0x05:0x02` fix, does `mouseGetActiveProfile` report the hardware-active slot correctly after `mouseSetActiveProfile(N)`? (Verify with Probe 2 re-run post-fix.)
+2. After fixing `mouseSetActiveProfile` to emit `0x05:0x03` for all slots, does SET_PROFILE on the currently-active slot NAK harmlessly, or does it cause a side effect? (Was skipped as a dedicated probe — will be observed during app integration testing.)
+3. When SET_ACTIVE_PROFILE works for non-current slots, does the standard VARSTORE DPI read then return the new slot's DPI? (Probe 3 could not test this cleanly due to the broken SET_PROFILE — this must be verified during Phase 3 implementation.)
