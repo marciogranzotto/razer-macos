@@ -410,6 +410,69 @@ Implications for driver rewrite:
 - Remove the mirror-to-slot-1 behavior; it actively corrupts other profiles.
 - The correct per-profile DPI write sequence is: SET_ACTIVE_PROFILE(N) → SET_DPI(N, x, y) → SET_DPI_STAGES(N, stages) → MACRO_CLEAR.
 
+### Probe 4: button-mapping write arg[0] semantics
+
+Ran: `node scripts/probes/naga-v2-pro-probe.js set-btn-args`
+
+Key observations (salient excerpt):
+
+```
+initial state (active=1):
+    slot1: 01 01 00 01 01 01 00 00 00 00
+    slot2: 02 01 00 01 01 01 00 00 00 00
+    slot3: 03 01 00 01 01 01 00 00 00 00
+    slot4: 04 01 00 01 01 01 00 00 00 00
+    slot5: 05 01 00 01 01 01 00 00 00 00
+
+A. mouseSetButtonMapping(slotArg=1, ...) — NO prior SET_PROFILE
+  after write slotArg=1 (no preamble):
+    slot1: 01 01 00 01 01 aa bb cc dd ee    ← marker params landed in slot 1
+
+A. mouseSetButtonMapping(slotArg=3, ...) — NO prior SET_PROFILE
+  after write slotArg=3 (no preamble):
+    slot1: 01 01 00 01 02 ab bc cd de ef    ← slot 1 unchanged from prior write
+    slot3: 03 01 00 01 03 aa bb cc dd ee    ← marker params landed in slot 3
+
+B. SET_PROFILE(3) + mouseSetButtonMapping(slotArg=3, ...) — with preamble
+  after write slotArg=3 (with preamble):
+    slot3: 03 01 00 01 04 ab bc cd de ef    ← marker+1 params landed in slot 3
+
+A. mouseSetButtonMapping(slotArg=4, ...) — NO prior SET_PROFILE
+    slot4: 04 01 00 01 04 aa bb cc dd ee    ← marker params landed in slot 4
+
+A. mouseSetButtonMapping(slotArg=5, ...) — NO prior SET_PROFILE
+    slot5: 05 01 00 01 05 aa bb cc dd ee    ← marker params landed in slot 5
+```
+
+Note on read quality: `mouseGetButtonMapping` works correctly and returns stable, meaningful per-slot data. The initial state shows slot N has `arg[0]=N` as the first byte — consistent with the slot index being embedded in the response (likely from the request command echoed back). Reads are fully reliable in contrast to the broken `mouseGetDpiProfile` reads seen in Probe 3. The response layout (10 bytes) matches the `0x02:0x8c` GET_BUTTON_MAPPING response format: `[profile, button_id, layer, action_type, params[0..5]]`.
+
+Key questions answered:
+
+1. **Writes with `slotArg=1` (= active slot) without preamble**: yes — subsequent read for slot 1 shows marker params (`aa bb cc dd ee`). Confirmed landing immediately.
+
+2. **Writes with `slotArg ∈ {3,4,5}` WITHOUT preamble**: yes — every write landed in the exact slot specified by `slotArg`, with zero crosstalk to slot 1 or any other slot. Writing to slot 3 with `slotArg=3` → only `slot3` read returned `aa bb cc dd ee`; slot 1 was unaffected. Same pattern for slots 4 and 5. The device accepted per-slot button-mapping writes without any `SET_PROFILE` preamble.
+
+3. **Writes with `slotArg ∈ {3,4,5}` AFTER `SET_PROFILE(slotArg)` (preamble)**: also yes — the `marker+1` params appeared in the correct slot read. But this is not required: the preamble did not change the behaviour relative to the no-preamble case; both wrote to the target slot successfully. The only observable difference is that `SET_PROFILE` itself issued a `0x05:0x03` NAK (driver bug, not device rejection).
+
+Fork determination for button-mapping:
+
+- **Fork A evidence** (`arg[0]` must match active):
+  None. Writes to non-active slots (3, 4, 5) with no prior `SET_PROFILE` all landed in the specified slot. If Fork A were true, those writes would have been silently dropped, and the reads would have remained at initial values — which did not happen.
+
+- **Fork B evidence** (`arg[0]` is a real slot number, independent of active):
+  Definitive. All four slots (1, 3, 4, 5) received their writes with exact marker values. Reads confirmed distinct per-slot storage: each slot retained its own write independently. No cross-slot contamination was observed. The device's `SET_BUTTON_MAPPING (0x02:0x0c)` command uses `arg[0]` as a true slot/profile address with no dependency on the currently-active profile.
+
+Note on confounding factor: `mouseSetActiveProfile` is still broken for all slots (sends `0x05:0x03` which NAKs). This is irrelevant for Probe 4's conclusion because the no-preamble A-condition writes already proved per-slot addressing works without any profile switching.
+
+**CONFIRMED FORK: Fork B** — `SET_BUTTON_MAPPING arg[0]` is a real per-slot address. The device accepts button-mapping writes to any slot (1, 3, 4, 5 verified) without requiring `SET_ACTIVE_PROFILE` first. This is the opposite result from Probe 3 (DPI = Fork A). Button-mapping and DPI use different write semantics on this device.
+
+Implications for driver rewrite:
+- `mouseSetButtonMapping` does NOT need to be preceded by `SET_ACTIVE_PROFILE`. The current arg[0]-as-slot approach is correct for button mapping.
+- Remove any mirror-to-slot-1 logic in button-mapping write paths; it is harmful and unnecessary (each slot stores independently).
+- The button-mapping read path (`mouseGetButtonMapping`, `0x02:0x8c`) also works correctly per-slot with `arg[0]` as the slot index — no fix needed for reads.
+- DPI and button-mapping must be treated as separate subsystems in the rewrite: DPI uses VARSTORE (Fork A, requires SET_ACTIVE_PROFILE first), button-mapping uses direct per-slot addressing (Fork B, no preamble needed).
+- The correct per-profile button-mapping write sequence remains: `SET_BUTTON_MAPPING(slot=N, btn, layer, action_type, params)` — issued directly for any target slot without any profile-activation preamble.
+
 ## Open questions for Phase 2
 
 - **0x05:0x02 vs 0x05:0x82 ambiguity:** The capture shows 0x05:0x02 as the outgoing command that precedes full-resync flows, while our driver uses 0x05:0x82 (`GET_ACTIVE_PROFILE`). Both are labeled "GET_ACTIVE_PROFILE" in `COMMAND_NAMES` but may serve different roles (e.g., 0x02=host-to-device request, 0x82=device-to-host response in a request/response pattern), or 0x05:0x82 may be entirely wrong for this device. Probe 2.3 must test both command IDs to find which one returns a non-zero active profile index.

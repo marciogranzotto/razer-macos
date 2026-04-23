@@ -117,11 +117,48 @@ function probeSetDpiArgs() {
   }
 }
 
+function probeSetBtnArgs() {
+  const id = findNaga();
+  console.log('Probe 4: button-mapping write arg[0] semantics');
+  console.log('Strategy: same shape as probe 3, but with button-mapping writes.');
+
+  // Pick a benign button to test on: button 0x01 — small arbitrary id.
+  // Action type 0x01 is typical "mouse button" category; params are just markers.
+  const BTN = 0x01;
+  const LAYER = 0x00;
+  const ACTION_TYPE = 0x01;
+  const markerParams = (slot) => [slot, 0xaa, 0xbb, 0xcc, 0xdd, 0xee];
+
+  const readAll = (tag) => {
+    console.log(`  ${tag}:`);
+    [1, 2, 3, 4, 5].forEach(s => {
+      const raw = addon.mouseGetButtonMapping(id, s, BTN, LAYER);
+      console.log(`    slot${s}: ${Array.from(raw).slice(0, 10).map(b => b.toString(16).padStart(2, '0')).join(' ')}`);
+    });
+  };
+
+  addon.mouseSetActiveProfile(id, 1);
+  readAll('initial state (active=1)');
+
+  // Slot 2 intentionally skipped per user's hardware constraint — no writes to slot 2, no SET_PROFILE(2).
+  for (const slotArg of [1, 3, 4, 5]) {
+    console.log(`\nA. mouseSetButtonMapping(slotArg=${slotArg}, params=${markerParams(slotArg)}) — NO prior SET_PROFILE`);
+    addon.mouseSetButtonMapping(id, slotArg, BTN, LAYER, ACTION_TYPE, markerParams(slotArg));
+    readAll(`after write slotArg=${slotArg} (no preamble)`);
+
+    console.log(`\nB. SET_PROFILE(${slotArg}) + mouseSetButtonMapping(slotArg=${slotArg}, params=${markerParams(slotArg).map(x => x + 1)})`);
+    addon.mouseSetActiveProfile(id, slotArg);
+    addon.mouseSetButtonMapping(id, slotArg, BTN, LAYER, ACTION_TYPE, markerParams(slotArg).map(x => x + 1));
+    readAll(`after write slotArg=${slotArg} (with preamble)`);
+  }
+}
+
 const PROBES = {
   list: () => { listDevices(); },
   'set-profile': probeSetProfile,
   'get-active': probeGetActive,
   'set-dpi-args': probeSetDpiArgs,
+  'set-btn-args': probeSetBtnArgs,
 };
 
 function main() {
