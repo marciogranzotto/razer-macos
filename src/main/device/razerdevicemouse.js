@@ -43,7 +43,7 @@ export class RazerDeviceMouse extends RazerDevice {
     if(this.hasFeature(FeatureIdentifier.BUTTON_MAPPING)) {
       this.panelType = this.getSidePanelType();
       this.activeProfile = this.getActiveProfile();
-      this.slotOccupied = { 1: true, 2: false, 3: false, 4: false, 5: false };
+      this.slotOccupied = { 1: false, 2: false, 3: false, 4: false, 5: false };
       this.probeSlotOccupancy();
     }
 
@@ -92,7 +92,7 @@ export class RazerDeviceMouse extends RazerDevice {
   resetToState(state) {
     super.resetToState(state);
     if(this.hasFeature(FeatureIdentifier.MOUSE_DPI)) {
-      this.setDPI(state.dpi, 1);
+      this.setDPI(state.dpi);  // pass default (null) → operates on active slot
     }
     if(this.hasFeature(FeatureIdentifier.POLL_RATE)) {
       this.setPollRate(state.pollRate);
