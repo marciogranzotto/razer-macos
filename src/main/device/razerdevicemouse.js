@@ -14,6 +14,10 @@ export class RazerDeviceMouse extends RazerDevice {
 
     if(this.hasFeature(FeatureIdentifier.MOUSE_DPI)) {
       this.dpi = this.addon.mouseGetDpi(this.internalId);
+      // On Naga V2 Pro the VARSTORE DPI register is global; per-slot DPI lives
+      // in stage tables. Track the value we wrote to each slot so switchProfile
+      // updates `this.dpi` correctly from cache instead of a stale VARSTORE read.
+      this.slotDpi = { 1: null, 2: null, 3: null, 4: null, 5: null };
     }
 
     if(this.hasFeature(FeatureIdentifier.POLL_RATE)) {
@@ -160,11 +164,13 @@ export class RazerDeviceMouse extends RazerDevice {
   }
 
   getDPI(profile = null) {
-    // Live DPI (VARSTORE read) reflects the currently-active profile's active-stage DPI.
-    // If caller wants another profile's stored DPI, they must activate it first.
-    if (profile !== null && profile !== this.activeProfile) {
-      this.addon.mouseActivateProfile(this.internalId, profile);
-      this.activeProfile = profile;
+    const p = profile !== null ? profile : this.activeProfile;
+    if (p !== this.activeProfile) {
+      this.addon.mouseActivateProfile(this.internalId, p);
+      this.activeProfile = p;
+    }
+    if (this.slotDpi && this.slotDpi[p] !== null) {
+      return this.slotDpi[p];
     }
     return this.addon.mouseGetDpi(this.internalId);
   }
@@ -176,6 +182,7 @@ export class RazerDeviceMouse extends RazerDevice {
     // hardware's DPI-cycle button has usable alternatives.
     const p = profile !== null ? profile : this.activeProfile;
     this.dpi = dpi;
+    if (this.slotDpi) this.slotDpi[p] = dpi;
     const stages = [
       { x: Math.max(200, Math.floor(dpi / 4)), y: Math.max(200, Math.floor(dpi / 4)) },
       { x: Math.max(400, Math.floor(dpi / 2)), y: Math.max(400, Math.floor(dpi / 2)) },
@@ -265,8 +272,14 @@ export class RazerDeviceMouse extends RazerDevice {
     // The older 0x05:0x03 (mouseSetActiveProfile) does something else.
     this.addon.mouseActivateProfile(this.internalId, slot);
     this.activeProfile = slot;
-    // Re-read live DPI via VARSTORE (it reflects the active profile's stages).
-    this.dpi = this.addon.mouseGetDpi(this.internalId);
+    // Use cached per-slot DPI if we've set one this session; otherwise fall
+    // back to VARSTORE read (which is stale but better than nothing for slots
+    // we haven't written in this session).
+    if (this.slotDpi && this.slotDpi[slot] !== null) {
+      this.dpi = this.slotDpi[slot];
+    } else {
+      this.dpi = this.addon.mouseGetDpi(this.internalId);
+    }
   }
 
   saveToSlot(targetSlot) {
