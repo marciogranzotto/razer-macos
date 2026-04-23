@@ -249,34 +249,10 @@ export class RazerDeviceMouse extends RazerDevice {
 
   switchProfile(slot) {
     if (!this.panelType) return;
-    console.log(`[DPI-DIAG] switchProfile(${slot}) starting, activeProfile was ${this.activeProfile}`);
-    const buttons = this.getButtonsForPanel(this.panelType);
-    // Read all button mappings from target slot (both layers)
-    // Write them all to slot 1 to ensure live dispatch is current
-    [0x00, 0x01].forEach(layer => {
-      buttons.forEach(btn => {
-        const mapping = this.getButtonMapping(btn.id, layer, slot);
-        this.addon.mouseSetButtonMapping(this.internalId, 1, btn.id, layer, mapping.actionType, mapping.params);
-      });
-    });
-    // Mirror DPI to slot 1
-    const dpiResult = this.addon.mouseGetDpiProfile(this.internalId, slot);
-    console.log(`[DPI-DIAG]   read from slot ${slot}: x=${dpiResult.x}, y=${dpiResult.y}`);
-    this.addon.mouseSetDpiProfile(this.internalId, 1, dpiResult.x, dpiResult.y);
-    console.log(`[DPI-DIAG]   wrote x=${dpiResult.x} to slot 1`);
-    this.dpi = dpiResult.x;
-    // Update local tracking (no SET_PROFILE sent — see spec note)
+    this.addon.mouseSetActiveProfile(this.internalId, slot);
     this.activeProfile = slot;
-    // Diagnostic: read back every slot
-    try {
-      const readbacks = [1, 2, 3, 4, 5].map(s => {
-        const r = this.addon.mouseGetDpiProfile(this.internalId, s);
-        return `slot${s}=${r.x}`;
-      });
-      console.log(`[DPI-DIAG]   read-back after switch: ${readbacks.join(', ')}`);
-    } catch (e) {
-      console.log(`[DPI-DIAG]   read-back failed: ${e.message}`);
-    }
+    // Re-read live DPI from VARSTORE so the UI reflects the new slot's value.
+    this.dpi = this.addon.mouseGetDpi(this.internalId);
   }
 
   saveToSlot(targetSlot) {
