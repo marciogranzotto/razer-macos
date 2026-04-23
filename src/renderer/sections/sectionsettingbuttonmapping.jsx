@@ -349,7 +349,10 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
     event.preventDefault();
     event.stopPropagation();
 
-    if (MODIFIER_CODES.has(event.code)) {
+    // React 16's SyntheticKeyboardEvent does not expose `code` — read from nativeEvent.
+    const code = event.nativeEvent.code;
+
+    if (MODIFIER_CODES.has(code)) {
       // Modifier pressed — update live display, wait for more input
       const mods = (event.ctrlKey ? 0x01 : 0)
                  | (event.shiftKey ? 0x02 : 0)
@@ -361,7 +364,7 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
 
     // Non-modifier pressed
     this.nonModifierPressed = true;
-    const hidCode = CODE_TO_HID[event.code];
+    const hidCode = CODE_TO_HID[code];
 
     if (hidCode === undefined) {
       // Key not in HID keyboard page — flash warning
@@ -392,11 +395,12 @@ export class SectionSettingButtonMapping extends SectionSettingBlock {
     event.preventDefault();
     event.stopPropagation();
 
-    if (!MODIFIER_CODES.has(event.code)) return;
+    const code = event.nativeEvent.code;
+    if (!MODIFIER_CODES.has(code)) return;
     if (this.nonModifierPressed) return;
 
     // Modifier released with no non-modifier pressed — capture standalone modifier
-    const hidCode = CODE_TO_HID[event.code];
+    const hidCode = CODE_TO_HID[code];
     if (hidCode === undefined) return;
 
     this.setState({
