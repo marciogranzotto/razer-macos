@@ -257,17 +257,30 @@ export class RazerDeviceMouse extends RazerDevice {
 
   saveToSlot(targetSlot) {
     if (!this.panelType) return;
+    if (targetSlot < 1 || targetSlot > 5) return;
+    const sourceSlot = this.activeProfile;
     const buttons = this.getButtonsForPanel(this.panelType);
-    // Copy all button mappings from slot 1 to target slot (both layers)
+    // Snapshot current button mappings from the active slot (Fork B per-slot reads are honest).
+    const snapshot = [];
     [0x00, 0x01].forEach(layer => {
       buttons.forEach(btn => {
-        const mapping = this.getButtonMapping(btn.id, layer, 1);
-        this.addon.mouseSetButtonMapping(this.internalId, targetSlot, btn.id, layer, mapping.actionType, mapping.params);
+        const mapping = this.getButtonMapping(btn.id, layer, sourceSlot);
+        snapshot.push({ layer, buttonId: btn.id, actionType: mapping.actionType, params: mapping.params });
       });
     });
-    // Copy DPI
-    const dpiResult = this.addon.mouseGetDpiProfile(this.internalId, 1);
-    this.addon.mouseSetDpiProfile(this.internalId, targetSlot, dpiResult.x, dpiResult.y);
+    // Snapshot current DPI from VARSTORE.
+    const dpi = this.addon.mouseGetDpi(this.internalId);
+    // Switch hardware to target slot so VARSTORE DPI write lands there.
+    this.addon.mouseSetActiveProfile(this.internalId, targetSlot);
+    this.activeProfile = targetSlot;
+    // Write button mappings to target slot (Fork B — per-slot write is honest).
+    snapshot.forEach(({ layer, buttonId, actionType, params }) => {
+      this.addon.mouseSetButtonMapping(this.internalId, targetSlot, buttonId, layer, actionType, params);
+    });
+    // Write DPI to target slot via VARSTORE (now active).
+    this.addon.mouseSetDpi(this.internalId, dpi);
+    this.dpi = dpi;
+    // MACRO_CLEAR observed in Synapse after profile operations — preserve that convention.
     this.addon.mouseMacroClear(this.internalId);
     this.slotOccupied[targetSlot] = true;
   }
