@@ -117,6 +117,25 @@ function probeSetDpiArgs() {
   }
 }
 
+function probeReadVariants() {
+  const id = findNaga();
+  console.log('Probe 6: GET_DPI read variants');
+  console.log('Strategy: on each active profile, compare mouseGetDpi (standard VARSTORE read) vs');
+  console.log('          mouseGetDpiProfile(slot=active) vs mouseGetDpiProfile(slot != active).');
+
+  // Slot 2 intentionally skipped as the SET_PROFILE target per user's hardware constraint.
+  // Reads of slot 2 via mouseGetDpiProfile are non-destructive and remain enabled.
+  for (const active of [1, 3, 4, 5]) {
+    addon.mouseSetActiveProfile(id, active);
+    console.log(`\nActive = ${active}:`);
+    console.log(`  mouseGetDpi (standard VARSTORE): ${addon.mouseGetDpi(id)}`);
+    [1, 2, 3, 4, 5].forEach(s => {
+      const r = addon.mouseGetDpiProfile(id, s);
+      console.log(`  mouseGetDpiProfile(${s}): x=${r.x} y=${r.y}`);
+    });
+  }
+}
+
 function probeSetBtnArgs() {
   const id = findNaga();
   console.log('Probe 4: button-mapping write arg[0] semantics');
@@ -159,6 +178,7 @@ const PROBES = {
   'get-active': probeGetActive,
   'set-dpi-args': probeSetDpiArgs,
   'set-btn-args': probeSetBtnArgs,
+  'read-variants': probeReadVariants,
 };
 
 function main() {

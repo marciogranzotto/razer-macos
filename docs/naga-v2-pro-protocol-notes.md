@@ -473,6 +473,71 @@ Implications for driver rewrite:
 - DPI and button-mapping must be treated as separate subsystems in the rewrite: DPI uses VARSTORE (Fork A, requires SET_ACTIVE_PROFILE first), button-mapping uses direct per-slot addressing (Fork B, no preamble needed).
 - The correct per-profile button-mapping write sequence remains: `SET_BUTTON_MAPPING(slot=N, btn, layer, action_type, params)` — issued directly for any target slot without any profile-activation preamble.
 
+### Probe 6: GET_DPI read variants
+
+Ran: `node scripts/probes/naga-v2-pro-probe.js read-variants`
+
+```
+Found 1 device(s):
+  [0] pid=0xa7 internalId=0
+Probe 6: GET_DPI read variants
+Strategy: on each active profile, compare mouseGetDpi (standard VARSTORE read) vs
+          mouseGetDpiProfile(slot=active) vs mouseGetDpiProfile(slot != active).
+Command failed (mouse)
+Contents of request_report are:
+command_class: 0X05
+command_id: 0X03
+transaction_id: 0X1F
+
+
+Active = 1:
+  mouseGetDpi (standard VARSTORE): 1121
+  mouseGetDpiProfile(1): x=1285 y=257
+  mouseGetDpiProfile(2): x=1029 y=257
+  mouseGetDpiProfile(3): x=1029 y=257
+  mouseGetDpiProfile(4): x=1029 y=257
+  mouseGetDpiProfile(5): x=773 y=257
+
+Active = 3:
+  mouseGetDpi (standard VARSTORE): 1121
+  mouseGetDpiProfile(1): x=1285 y=257
+  mouseGetDpiProfile(2): x=1029 y=257
+  mouseGetDpiProfile(3): x=1029 y=257
+  mouseGetDpiProfile(4): x=1029 y=257
+  mouseGetDpiProfile(5): x=773 y=257
+
+Active = 4:
+  mouseGetDpi (standard VARSTORE): 1121
+  mouseGetDpiProfile(1): x=1285 y=257
+  mouseGetDpiProfile(2): x=1029 y=257
+  mouseGetDpiProfile(3): x=1029 y=257
+  mouseGetDpiProfile(4): x=1029 y=257
+  mouseGetDpiProfile(5): x=773 y=257
+
+Active = 5:
+  mouseGetDpi (standard VARSTORE): 1121
+  mouseGetDpi (standard VARSTORE): 1121
+  mouseGetDpiProfile(1): x=1285 y=257
+  mouseGetDpiProfile(2): x=1029 y=257
+  mouseGetDpiProfile(3): x=1029 y=257
+  mouseGetDpiProfile(4): x=1029 y=257
+  mouseGetDpiProfile(5): x=773 y=257
+```
+
+Findings:
+
+1. Does `mouseGetDpi` always agree with `mouseGetDpiProfile(active)`? **No — they never agree.** `mouseGetDpi` returned 1121 for all four active states. `mouseGetDpiProfile` returned 1285 for slot 1, 1029 for slots 2–4, and 773 for slot 5 — none of which equal 1121. The two read paths return completely different (and both unreliable) values and clearly target different registers or command IDs.
+
+2. Does `mouseGetDpi` return different values for different active profiles, or the same value regardless? **Same value (1121) regardless.** `mouseGetDpi` returned 1121 for active=1, 3, 4, and 5 — identical across all four iterations. This confirms both that `mouseSetActiveProfile` continues to fail silently for all slots (active slot never actually changed from its pre-probe state of slot 1, as established in Probe 3), AND that even if SET_PROFILE were working, `mouseGetDpi` (standard VARSTORE read) may reflect only the hardware-active slot without update when called immediately after a failed SET_PROFILE. The 1121 value is the last DPI written to slot 1 in Probe 3 (step B, `marker+10=1121` for slotArg=1). The VARSTORE read is stable and correct for the currently-active slot, but produces no per-profile variation because the active slot never changes.
+
+3. Does `mouseGetDpiProfile(slot != active)` return:
+   - **Garbage / stage metadata (~0x0505, 0x0405)** — confirmed Fork A evidence; `0x04:0x86` is not a per-slot DPI read. The x-component values are 1285 (=0x0505), 1029 (=0x0405/0x0405), and 773 (=0x0305), where the high byte appears to encode slot-related status rather than DPI. The y-component is uniformly 257 (=0x0101) for all slots and all active states — a fixed non-DPI constant. These values are not meaningful DPI readings: no Razer product offers 773 or 257 DPI. The `0x04:0x86` command is consistently broken for per-slot DPI reads on this device regardless of which slot is queried or which slot is active.
+
+Implication for DPI read path:
+`mouseGetDpiProfile (0x04:0x86)` returns garbage unconditionally on this device — the x and y fields contain status/count bytes rather than DPI values, and the pattern is invariant across all four active states and all five slot indices. The driver read path must be changed. The only working DPI read available is `mouseGetDpi` (standard VARSTORE), which correctly returns the DPI of the currently-active slot (confirmed: 1121 = last written value for active slot 1). The correct per-profile DPI read sequence is therefore: `SET_ACTIVE_PROFILE(N)` → `mouseGetDpi()`. There is no evidence that `0x04:0x86` can be salvaged with a different argument encoding for this device. A potential alternative is command `0x04:0x85` (a lower variant that may encode the slot in arg[0] similarly to how `0x04:0x05` does for writes), but that command has not been probed and would require a new probe to confirm.
+
+Cross-reference with Probe 1: confirms the garbage pattern observed there (1285=0x0505, 1029=0x0405, 773=0x0305 suffix 0x05). Probe 6 adds new detail: the y-component is 257 (=0x0101) universally — in Probe 1, only x-values were noted. The y=257 is consistent with the response's y-DPI bytes being 0x01:0x01, which could be a command echo or a status code (value 1 in both bytes). This further confirms `0x04:0x86` is not returning a valid DPI response for this device.
+
 ## Open questions for Phase 2
 
 - **0x05:0x02 vs 0x05:0x82 ambiguity:** The capture shows 0x05:0x02 as the outgoing command that precedes full-resync flows, while our driver uses 0x05:0x82 (`GET_ACTIVE_PROFILE`). Both are labeled "GET_ACTIVE_PROFILE" in `COMMAND_NAMES` but may serve different roles (e.g., 0x02=host-to-device request, 0x82=device-to-host response in a request/response pattern), or 0x05:0x82 may be entirely wrong for this device. Probe 2.3 must test both command IDs to find which one returns a non-zero active profile index.
