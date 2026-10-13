@@ -1,5 +1,5 @@
 import { RazerApplication } from './razerapplication';
-import { app, dialog, BrowserWindow, ipcMain, Menu, nativeTheme, Tray, powerMonitor } from 'electron';
+import { app, dialog, BrowserWindow, ipcMain, Menu, nativeTheme, Tray, powerMonitor, screen } from 'electron';
 import path from 'path';
 import { getMenuFor } from './menu/menubuilder';
 
@@ -265,6 +265,11 @@ export class Application {
       event.reply('all-profile-mappings-response', { profiles });
     });
 
+    // window
+    ipcMain.on('content-height-changed', (_, contentHeight) => {
+      this.fitWindowToContent(contentHeight);
+    });
+
     //state manager
     ipcMain.on('state-settings-add', async (event, stateName) => {
       event.returnValue = await this.razerApplication.stateManager.addState(stateName);
@@ -323,7 +328,7 @@ export class Application {
     this.browserWindow = new BrowserWindow({
       webPreferences: { nodeIntegration: true },
       //titleBarStyle: 'hidden',
-      height: 800, // This is adjusted later with window.setSize
+      height: 800, // This is adjusted later by fitWindowToContent
       resizable: false,
       width: 500,
       minWidth: 320,
@@ -428,6 +433,21 @@ export class Application {
   showView(args) {
     this.browserWindow.webContents.send('render-view', args);
     this.browserWindow.show();
+  }
+
+  /**
+   * Resizes the window so the rendered view fits without scrolling,
+   * as far as the work area of the window's display allows.
+   */
+  fitWindowToContent(contentHeight) {
+    const bounds = this.browserWindow.getBounds();
+    const frameHeight = bounds.height - this.browserWindow.getContentSize()[1];
+    const { workArea } = screen.getDisplayMatching(bounds);
+    const [, minHeight] = this.browserWindow.getMinimumSize();
+    const height = Math.max(minHeight, Math.min(contentHeight + frameHeight, workArea.height));
+    // Move the window up if it would otherwise grow past the bottom of the work area
+    const y = Math.max(workArea.y, Math.min(bounds.y, workArea.y + workArea.height - height));
+    this.browserWindow.setBounds({ x: bounds.x, y, width: bounds.width, height });
   }
 
   quit() {

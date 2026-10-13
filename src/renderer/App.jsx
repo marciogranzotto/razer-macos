@@ -22,9 +22,27 @@ export class App extends React.Component {
       this.setState({mode: null, message: null});
       this.setState({mode: mode, message: message});
     })
+
+    this.contentRef = React.createRef();
+  }
+
+  componentDidMount() {
+    // Report the natural height of the rendered view, so that the main process can fit the window to it
+    this.contentObserver = new ResizeObserver(entries => {
+      ipcRenderer.send('content-height-changed', Math.ceil(entries[0].contentRect.height));
+    });
+    this.contentObserver.observe(this.contentRef.current);
+  }
+
+  componentWillUnmount() {
+    this.contentObserver.disconnect();
   }
 
   render() {
+    return <div id='content' ref={this.contentRef}>{this.renderView()}</div>;
+  }
+
+  renderView() {
     if(this.state.mode === 'device') {
       return <ViewDeviceSettings config={this.state.message}></ViewDeviceSettings>;
     } else if(this.state.mode == 'color') {

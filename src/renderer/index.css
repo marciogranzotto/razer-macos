@@ -38,17 +38,14 @@ body {
   flex:1;
 }
 
-#app > span.no-select {
-  display:flex;
-  flex:1;
-  flex-direction: column;
+/* Keeps its natural height: the window is fitted to it, and the page scrolls if the screen is too small */
+#content {
+  flex-shrink: 0;
 }
 
 div#body {
   display:flex;
-  flex:1;
   flex-direction: column;
-  overflow:auto;
 }
 
 #product {
@@ -166,7 +163,7 @@ ol {
 #no-device {
   font-family: 'SF Display Pro', sans-serif;
   display: flex;
-  flex: 1;
+  min-height: 320px;
   font-size: 20px;
   color: white;
   justify-content: center;
